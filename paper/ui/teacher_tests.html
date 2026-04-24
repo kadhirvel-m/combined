@@ -429,6 +429,11 @@
             ).trim().toLowerCase();
         }
 
+        let testsData = [];
+        let classMapGlobal = new Map();
+        const progressCache = new Map();
+        let activeLoadRun = 0;
+
         function classLabelParts(cls, meta = {}) {
             if (!cls) {
                 return { line1: 'Class not linked', line2: '' };
@@ -466,114 +471,57 @@
             }
         }
 
-        async function loadTests() {
-            const token = getToken();
+        function computeProgressFromResult(result) {
+            const attempts = Array.isArray(result?.attempts) ? result.attempts : [];
+            const classStudents = Array.isArray(result?.class_students) ? result.class_students : [];
+            const notAttempted = Array.isArray(result?.students_not_attempted) ? result.students_not_attempted : [];
+
+            const submittedIds = new Set();
+            const inProgressIds = new Set();
+            attempts.forEach((a) => {
+                const key = studentKey(a);
+                if (!key) return;
+                if (a && a.submitted_at) submittedIds.add(key);
+                else inProgressIds.add(key);
+            });
+            submittedIds.forEach((k) => inProgressIds.delete(k));
+
+            const completedFromAttempts = submittedIds.size;
+            const inProgressFromAttempts = inProgressIds.size;
+            const completedFromRoster = classStudents.filter((s) => String(s?.status || '').toLowerCase() === 'completed').length;
+            const inProgressFromRoster = classStudents.filter((s) => String(s?.status || '').toLowerCase() === 'in_progress').length;
+            const pendingFromRoster = classStudents.filter((s) => String(s?.status || '').toLowerCase() === 'pending').length;
+
+            const completed = Math.max(Number(result?.completed_count || 0), completedFromAttempts, completedFromRoster);
+            const total = Math.max(
+                classStudents.length,
+                completed + inProgressFromAttempts + notAttempted.length,
+                completedFromRoster + inProgressFromRoster + pendingFromRoster,
+                completed
+            );
+            return { completed, total };
+        }
+
+        function renderTestsList() {
             const wrap = $('#tests');
-            if (!token) {
-                wrap.innerHTML = '<div class="text-sm opacity-70">Sign in as teacher to view tests.</div>';
-                return;
-            }
-            wrap.innerHTML = '<div class="text-sm opacity-70">Loading tests...</div>';
+            if (!wrap) return;
 
-            try {
-                const base = await resolveApi();
-                const headers = { Authorization: 'Bearer ' + token };
+            wrap.innerHTML = testsData.map(t => {
+                const prog = progressCache.get(String(t.id)) || { completed: 0, total: 0, loading: true };
+                const hasProgress = !prog.loading;
+                const pct = hasProgress && prog.total > 0 ? Math.round((prog.completed / prog.total) * 100) : 0;
+                const cls = classMapGlobal.get(String(t.class_id || ''));
+                const classLines = classLabelParts(cls, {});
+                const statusClass = t.accepting_submissions === false
+                    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-200'
+                    : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/35 dark:text-emerald-200';
+                const statusText = t.accepting_submissions === false ? 'Closed' : 'Open';
+                const dateLabel = formatDate(t.created_at || t.updated_at);
 
-                const [tests, classes] = await Promise.all([
-                    fetchJSON(`${base}/api/teacher/tests`, { headers }),
-                    fetchJSON(`${base}/api/teacher/classes/mine`, { headers }).catch(() => [])
-                ]);
-
-                if (!Array.isArray(tests) || !tests.length) {
-                    wrap.innerHTML = '<div class="text-sm opacity-70">No tests created yet.</div>';
-                    return;
-                }
-
-                const classMap = new Map((classes || []).map(c => [String(c.id || ''), c]));
-                const classMetaById = new Map();
-                const classRosterById = new Map();
-
-                const classIds = Array.from(new Set((tests || []).map(t => String(t.class_id || '')).filter(Boolean)));
-                await Promise.all(classIds.map(async (classId) => {
-                    try {
-                        const r = await fetchJSON(`${base}/api/teacher/classes/${encodeURIComponent(classId)}/students`, { headers }, 1);
-                        const roster = Array.isArray(r.students) ? r.students : [];
-                        classRosterById.set(String(classId), roster);
-                        classMetaById.set(String(classId), {
-                            strength: Number(r.total || 0),
-                            batchLabel: (r.applied_filters && r.applied_filters.batch_label) ? String(r.applied_filters.batch_label) : ''
-                        });
-                    } catch (_) {
-                        classRosterById.set(String(classId), []);
-                        classMetaById.set(String(classId), { strength: 0, batchLabel: '' });
-                    }
-                }));
-
-                const rows = await Promise.all(tests.map(async (t) => {
-                    try {
-                        const result = await fetchJSON(`${base}/api/teacher/tests/${encodeURIComponent(t.id)}/results`, { headers }, 1);
-                        const attempts = Array.isArray(result.attempts) ? result.attempts : [];
-                        const notAttempted = Array.isArray(result.students_not_attempted) ? result.students_not_attempted : [];
-                        const resultRoster = Array.isArray(result.class_students) ? result.class_students : [];
-                        const classRoster = Array.isArray(classRosterById.get(String(t.class_id || ''))) ? classRosterById.get(String(t.class_id || '')) : [];
-
-                        const submittedIds = new Set();
-                        const inProgressIds = new Set();
-                        attempts.forEach((a) => {
-                            const key = studentKey(a);
-                            if (!key) return;
-                            if (a && a.submitted_at) submittedIds.add(key);
-                            else inProgressIds.add(key);
-                        });
-                        // If a student appears as submitted, do not keep them in in-progress.
-                        submittedIds.forEach((k) => inProgressIds.delete(k));
-
-                        const completedFromAttempts = submittedIds.size;
-                        const inProgressFromAttempts = inProgressIds.size;
-
-                        const completedFromRoster = resultRoster.filter((s) => String(s.status || '').toLowerCase() === 'completed').length;
-                        const inProgressFromRoster = resultRoster.filter((s) => String(s.status || '').toLowerCase() === 'in_progress').length;
-                        const pendingFromRoster = resultRoster.filter((s) => String(s.status || '').toLowerCase() === 'pending').length;
-
-                        const completed = Math.max(Number(result.completed_count || 0), completedFromAttempts, completedFromRoster);
-
-                        const union = new Set();
-                        classRoster.forEach(s => { const k = studentKey(s); if (k) union.add(k); });
-                        resultRoster.forEach(s => { const k = studentKey(s); if (k) union.add(k); });
-                        notAttempted.forEach(s => { const k = studentKey(s); if (k) union.add(k); });
-                        attempts.forEach(s => { const k = studentKey(s); if (k) union.add(k); });
-
-                        const classMeta = classMetaById.get(String(t.class_id || '')) || { strength: 0, batchLabel: '' };
-                        const totalFromClassStrength = Number(classMeta.strength || 0);
-                        const totalFromRoster = completedFromRoster + inProgressFromRoster + pendingFromRoster;
-                        const totalFromResults = completed + inProgressFromAttempts + notAttempted.length;
-                        const totalFromUnion = union.size;
-                        const total = Math.max(totalFromClassStrength, totalFromRoster, totalFromResults, totalFromUnion, completed);
-
-                        return { id: t.id, completed, total: Math.max(total, 0) };
-                    } catch (_) {
-                        return { id: t.id, completed: 0, total: 0 };
-                    }
-                }));
-
-                const progressById = new Map(rows.map(r => [String(r.id), r]));
-
-                wrap.innerHTML = tests.map(t => {
-                    const prog = progressById.get(String(t.id)) || { completed: 0, total: 0 };
-                    const pct = prog.total > 0 ? Math.round((prog.completed / prog.total) * 100) : 0;
-                    const cls = classMap.get(String(t.class_id || ''));
-                    const classMeta = classMetaById.get(String(t.class_id || '')) || { strength: 0, batchLabel: '' };
-                    const classLines = classLabelParts(cls, classMeta);
-                    const statusClass = t.accepting_submissions === false
-                        ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-200'
-                        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/35 dark:text-emerald-200';
-                    const statusText = t.accepting_submissions === false ? 'Closed' : 'Open';
-                    const dateLabel = formatDate(t.created_at || t.updated_at);
-
-                    return `<article class="rounded-2xl p-4 sm:p-5 bg-white/65 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/15">
+                return `<article class="rounded-2xl p-4 sm:p-5 bg-white/65 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/15" data-test-id="${esc(t.id)}">
                         <div class="flex gap-4 items-start">
                             <div class="completion-ring" style="--pct:${Math.max(0, Math.min(100, pct))}">
-                                <span class="completion-value">${pct}%</span>
+                                <span class="completion-value">${hasProgress ? `${pct}%` : '…'}</span>
                             </div>
                             <div class="min-w-0 flex-1 space-y-2">
                                 <div class="flex items-start justify-between gap-3">
@@ -584,7 +532,7 @@
                                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs sm:text-sm">
                                     <div class="rounded-lg bg-black/[0.03] dark:bg-white/[0.05] px-3 py-2">
                                         <div class="opacity-60">Completion</div>
-                                        <div class="font-semibold">${prog.completed} / ${prog.total || 0} completed</div>
+                                        <div class="font-semibold" data-role="completion-text">${hasProgress ? `${prog.completed} / ${prog.total || 0} completed` : 'Calculating…'}</div>
                                     </div>
                                     <div class="rounded-lg bg-black/[0.03] dark:bg-white/[0.05] px-3 py-2">
                                         <div class="opacity-60">Test date</div>
@@ -605,14 +553,104 @@
                             </div>
                         </div>
                     </article>`;
-                }).join('');
+            }).join('');
+        }
 
-                $$('button[data-action]', wrap).forEach(btn => btn.addEventListener('click', () => handleAction(btn)));
+        function patchProgressCard(testId, prog) {
+            const safeId = String(testId).replace(/"/g, '\\"');
+            const card = document.querySelector(`[data-test-id="${safeId}"]`);
+            if (!card) return;
+            const pct = prog.total > 0 ? Math.round((prog.completed / prog.total) * 100) : 0;
+            const ring = card.querySelector('.completion-ring');
+            const value = card.querySelector('.completion-value');
+            const completionText = card.querySelector('[data-role="completion-text"]');
+            if (ring) ring.style.setProperty('--pct', String(Math.max(0, Math.min(100, pct))));
+            if (value) value.textContent = `${pct}%`;
+            if (completionText) completionText.textContent = `${prog.completed} / ${prog.total || 0} completed`;
+        }
+
+        async function hydrateProgressForTests(base, headers, tests, runId) {
+            const queue = [...tests];
+            const workers = Math.min(4, Math.max(1, queue.length));
+
+            async function worker() {
+                while (queue.length && runId === activeLoadRun) {
+                    const t = queue.shift();
+                    if (!t || !t.id) continue;
+                    const testId = String(t.id);
+                    if (progressCache.has(testId) && !progressCache.get(testId)?.loading) {
+                        patchProgressCard(testId, progressCache.get(testId));
+                        continue;
+                    }
+                    try {
+                        const result = await fetchJSON(`${base}/api/teacher/tests/${encodeURIComponent(testId)}/results`, { headers }, 1);
+                        const prog = computeProgressFromResult(result);
+                        progressCache.set(testId, prog);
+                        patchProgressCard(testId, prog);
+                    } catch (_) {
+                        const fallback = { completed: 0, total: 0 };
+                        progressCache.set(testId, fallback);
+                        patchProgressCard(testId, fallback);
+                    }
+                }
+            }
+
+            await Promise.all(Array.from({ length: workers }, () => worker()));
+        }
+
+        async function loadTests() {
+            const token = getToken();
+            const wrap = $('#tests');
+            if (!token) {
+                wrap.innerHTML = '<div class="text-sm opacity-70">Sign in as teacher to view tests.</div>';
+                return;
+            }
+            wrap.innerHTML = '<div class="text-sm opacity-70">Loading tests...</div>';
+
+            try {
+                const runId = ++activeLoadRun;
+                const base = await resolveApi();
+                const headers = { Authorization: 'Bearer ' + token };
+
+                const [tests, classes] = await Promise.all([
+                    fetchJSON(`${base}/api/teacher/tests`, { headers }),
+                    fetchJSON(`${base}/api/teacher/classes/mine`, { headers }).catch(() => [])
+                ]);
+
+                if (runId !== activeLoadRun) return;
+
+                if (!Array.isArray(tests) || !tests.length) {
+                    wrap.innerHTML = '<div class="text-sm opacity-70">No tests created yet.</div>';
+                    return;
+                }
+
+                testsData = tests;
+                classMapGlobal = new Map((classes || []).map(c => [String(c.id || ''), c]));
+                testsData.forEach(t => {
+                    const tid = String(t.id || '');
+                    if (tid && !progressCache.has(tid)) progressCache.set(tid, { completed: 0, total: 0, loading: true });
+                });
+
+                renderTestsList();
+
+                const kickHydration = () => hydrateProgressForTests(base, headers, testsData, runId).catch(() => { });
+                if (typeof window.requestIdleCallback === 'function') {
+                    window.requestIdleCallback(kickHydration, { timeout: 1200 });
+                } else {
+                    setTimeout(kickHydration, 60);
+                }
             } catch (err) {
                 console.error(err);
                 wrap.innerHTML = '<div class="text-sm text-red-600 dark:text-red-300">Unable to load tests right now.</div>';
             }
         }
+
+        document.addEventListener('click', (e) => {
+            const btn = e.target && e.target.closest ? e.target.closest('button[data-action]') : null;
+            if (!btn) return;
+            if (!btn.closest('#tests')) return;
+            handleAction(btn);
+        });
 
         async function handleAction(btn) {
             const action = btn.dataset.action;

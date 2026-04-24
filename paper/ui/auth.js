@@ -325,12 +325,19 @@
 
   function handleSignOut(ev){
     if(ev) ev.preventDefault();
+    const session = activeSession();
+    const root = resolveUiRoot();
+    const path = String(location.pathname || '').toLowerCase();
+    const isTeacherSurface = path.includes('/teachers/') || path.includes('teacher_');
+    const signOutRedirect = (session.kind === 'teacher' || isTeacherSurface)
+      ? (root + 'teachers/teacher_login.html')
+      : (root + 'login.html');
     fetch(`${API}/logout`, { method: 'POST', credentials: 'include' })
       .catch(() => null)
       .finally(() => {
         clearAllTokens();
         if(typeof window.__PX_CLOSE_MOBILE_NAV === 'function'){ window.__PX_CLOSE_MOBILE_NAV(); }
-        window.location.href = 'login.html';
+        window.location.href = signOutRedirect;
       });
   }
 
