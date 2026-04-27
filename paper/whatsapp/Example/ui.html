@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Web Actions</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-glow: conic-gradient(from 180deg at 50% 50%, #2a8af633 0deg, #a853ba33 180deg, #e92a6733 360deg);
+            --bg-color: #0f1117;
+            --glass-bg: rgba(25, 28, 36, 0.6);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --accent: #6d28d9;
+            --accent-hover: #8b5cf6;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(109, 40, 217, 0.15), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(37, 99, 235, 0.15), transparent 25%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow-x: hidden;
+            padding: 2rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(to right, #a78bfa, #60a5fa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-align: center;
+        }
+
+        p.subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+            font-weight: 300;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0.5rem;
+            border-radius: 9999px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            border-radius: 9999px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1rem;
+            font-weight: 400;
+        }
+
+        .tab.active {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 4px 12px rgba(109, 40, 217, 0.4);
+        }
+
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        input[type="text"],
+        textarea,
+        input[type="file"] {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            background: rgba(0,0,0,0.2);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: var(--text-main);
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+            font-size: 1rem;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-hover);
+            box-shadow: 0 0 0 3px rgba(109, 40, 217, 0.2);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        input[type="file"]::file-selector-button {
+            padding: 0.5rem 1rem;
+            margin-right: 1rem;
+            background: var(--accent);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        input[type="file"]::file-selector-button:hover {
+            background: var(--accent-hover);
+        }
+
+        button.submit-btn {
+            width: 100%;
+            padding: 1rem;
+            background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 1.125rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            margin-top: 1rem;
+            box-shadow: 0 8px 20px rgba(109, 40, 217, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        button.submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px rgba(109, 40, 217, 0.5);
+        }
+
+        button.submit-btn:active {
+            transform: translateY(0);
+        }
+
+        /* Loading animation for button */
+        .spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        #notification {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            color: white;
+            font-weight: 500;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            z-index: 1000;
+        }
+
+        #notification.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .success { background: #10b981; box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3); }
+        .error { background: #ef4444; box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3); }
+
+        .poll-options {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .add-option-btn {
+            background: transparent;
+            border: 1px dashed var(--glass-border);
+            color: var(--text-muted);
+            padding: 0.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 0.5rem;
+        }
+
+        .add-option-btn:hover {
+            border-color: var(--text-main);
+            color: var(--text-main);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Send Message</h1>
+        <p class="subtitle">Connect seamlessly directly from your browser.</p>
+
+        <div class="form-group">
+            <label for="global-jid">Recipient Phone Number (with country code, e.g. 919876543210)</label>
+            <input type="text" id="global-jid" placeholder="Enter target number...">
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('text')">Text</button>
+            <button class="tab" onclick="switchTab('image')">Image</button>
+            <button class="tab" onclick="switchTab('poll')">Poll</button>
+            <button class="tab" onclick="switchTab('list')">List</button>
+            <button class="tab" onclick="switchTab('button')">Button</button>
+        </div>
+
+        <!-- Text Form -->
+        <div id="text-tab" class="tab-content active">
+            <form id="text-form" onsubmit="handleTextSubmit(event)">
+                <div class="form-group">
+                    <label for="message-text">Message Content</label>
+                    <textarea id="message-text" placeholder="Type your message here..." required></textarea>
+                </div>
+                <button type="submit" class="submit-btn" id="btn-text">
+                    <span class="btn-text">Send Text</span>
+                    <div class="spinner"></div>
+                </button>
+            </form>
+        </div>
+
+        <!-- Image Form -->
+        <div id="image-tab" class="tab-content">
+            <form id="image-form" onsubmit="handleImageSubmit(event)">
+                <div class="form-group">
+                    <label for="image-file">Image File</label>
+                    <input type="file" id="image-file" accept="image/*" required>
+                </div>
+                <div class="form-group">
+                    <label for="image-caption">Caption (Optional)</label>
+                    <input type="text" id="image-caption" placeholder="Add a nice caption...">
+                </div>
+                <button type="submit" class="submit-btn" id="btn-image">
+                    <span class="btn-text">Send Image</span>
+                    <div class="spinner"></div>
+                </button>
+            </form>
+        </div>
+
+        <!-- Poll Form -->
+        <div id="poll-tab" class="tab-content">
+            <form id="poll-form" onsubmit="handlePollSubmit(event)">
+                <div class="form-group">
+                    <label for="poll-question">Poll Question</label>
+                    <input type="text" id="poll-question" placeholder="E.g., What should we have for dinner?" required>
+                </div>
+                <div class="form-group">
+                    <label>Options</label>
+                    <div class="poll-options" id="poll-options-container">
+                        <input type="text" class="poll-option" placeholder="Option 1" required>
+                        <input type="text" class="poll-option" placeholder="Option 2" required>
+                    </div>
+                    <button type="button" class="add-option-btn" onclick="addPollOption()">+ Add another option</button>
+                </div>
+                <button type="submit" class="submit-btn" id="btn-poll">
+                    <span class="btn-text">Send Poll</span>
+                    <div class="spinner"></div>
+                </button>
+            </form>
+        </div>
+
+        <!-- List Form -->
+        <div id="list-tab" class="tab-content">
+            <form id="list-form" onsubmit="handleListSubmit(event)">
+                <div class="form-group">
+                    <label for="list-title">Title (e.g. Choose Your Shirt Size)</label>
+                    <input type="text" id="list-title" placeholder="List Title" required>
+                </div>
+                <div class="form-group">
+                    <label for="list-desc">Description</label>
+                    <input type="text" id="list-desc" placeholder="List Description (Optional)">
+                </div>
+                <div class="form-group">
+                    <label for="list-btn">Button Text</label>
+                    <input type="text" id="list-btn" placeholder="Select Size" required>
+                </div>
+                <div class="form-group">
+                    <label>Options</label>
+                    <div class="poll-options" id="list-options-container">
+                        <input type="text" class="list-option" placeholder="Option 1 (e.g. S)" required>
+                        <input type="text" class="list-option" placeholder="Option 2 (e.g. M)" required>
+                        <input type="text" class="list-option" placeholder="Option 3 (e.g. L)" required>
+                    </div>
+                    <button type="button" class="add-option-btn" onclick="addListOption()">+ Add another option</button>
+                </div>
+                <button type="submit" class="submit-btn" id="btn-list">
+                    <span class="btn-text">Send List</span>
+                    <div class="spinner"></div>
+                </button>
+            </form>
+        </div>
+
+        <!-- Button Form -->
+        <div id="button-tab" class="tab-content">
+            <form id="button-form" onsubmit="handleButtonSubmit(event)">
+                <div class="form-group">
+                    <label for="btn-question">Question</label>
+                    <input type="text" id="btn-question" placeholder="E.g., Do you agree?" required>
+                </div>
+                <div class="form-group">
+                    <label>Options (Buttons)</label>
+                    <div class="poll-options" id="btn-options-container">
+                        <input type="text" class="btn-option" placeholder="Option 1 (e.g. Yes)" required>
+                        <input type="text" class="btn-option" placeholder="Option 2 (e.g. No)" required>
+                    </div>
+                    <button type="button" class="add-option-btn" onclick="addButtonOption()">+ Add another option</button>
+                    <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">Maximum 3 options allowed by WhatsApp.</p>
+                </div>
+                <button type="submit" class="submit-btn" id="btn-button-send">
+                    <span class="btn-text">Send Buttons</span>
+                    <div class="spinner"></div>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="notification"></div>
+
+    <script>
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
+        }
+
+        function addPollOption() {
+            const container = document.getElementById('poll-options-container');
+            if (container.children.length >= 12) {
+                showNotification('Maximum 12 options allowed.', 'error');
+                return;
+            }
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'poll-option';
+            input.placeholder = `Option ${container.children.length + 1}`;
+            input.required = true;
+            container.appendChild(input);
+        }
+
+        function addListOption() {
+            const container = document.getElementById('list-options-container');
+            if (container.children.length >= 10) {
+                showNotification('Maximum 10 options allowed.', 'error');
+                return;
+            }
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'list-option';
+            input.placeholder = `Option ${container.children.length + 1}`;
+            input.required = true;
+            container.appendChild(input);
+        }
+
+        function showNotification(message, type) {
+            const el = document.getElementById('notification');
+            el.textContent = message;
+            el.className = type + ' show';
+            setTimeout(() => {
+                el.classList.remove('show');
+            }, 3000);
+        }
+
+        function toggleLoading(btnId, isLoading) {
+            const btn = document.getElementById(btnId);
+            const text = btn.querySelector('.btn-text');
+            const spinner = btn.querySelector('.spinner');
+            if (isLoading) {
+                btn.disabled = true;
+                text.style.display = 'none';
+                spinner.style.display = 'block';
+            } else {
+                btn.disabled = false;
+                text.style.display = 'block';
+                spinner.style.display = 'none';
+            }
+        }
+
+        function getJid() {
+            const val = document.getElementById('global-jid').value.trim();
+            if (!val) throw new Error("Please enter a recipient number.");
+            // Append @s.whatsapp.net if missing
+            if(val.includes('@g.us') || val.includes('@s.whatsapp.net')) return val;
+            return val + '@s.whatsapp.net';
+        }
+
+        async function handleTextSubmit(e) {
+            e.preventDefault();
+            try {
+                const jid = getJid();
+                const text = document.getElementById('message-text').value;
+                toggleLoading('btn-text', true);
+                
+                const res = await fetch('/api/send-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ jid, text })
+                });
+
+                if(!res.ok) throw new Error((await res.json()).error || "Failed to send message");
+                showNotification('Message sent successfully! 🚀', 'success');
+                document.getElementById('message-text').value = '';
+            } catch (err) {
+                showNotification(err.message, 'error');
+            } finally {
+                toggleLoading('btn-text', false);
+            }
+        }
+
+        async function handleImageSubmit(e) {
+            e.preventDefault();
+            try {
+                const jid = getJid();
+                const fileInput = document.getElementById('image-file');
+                if (!fileInput.files[0]) throw new Error("Please select an image.");
+                
+                const formData = new FormData();
+                formData.append('jid', jid);
+                formData.append('image', fileInput.files[0]);
+                formData.append('caption', document.getElementById('image-caption').value);
+
+                toggleLoading('btn-image', true);
+                
+                const res = await fetch('/api/send-image', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if(!res.ok) throw new Error((await res.json()).error || "Failed to send image");
+                showNotification('Image sent successfully! 🖼️', 'success');
+                document.getElementById('image-form').reset();
+            } catch (err) {
+                showNotification(err.message, 'error');
+            } finally {
+                toggleLoading('btn-image', false);
+            }
+        }
+
+        async function handlePollSubmit(e) {
+            e.preventDefault();
+            try {
+                const jid = getJid();
+                const name = document.getElementById('poll-question').value;
+                const options = Array.from(document.querySelectorAll('.poll-option'))
+                                    .map(el => el.value)
+                                    .filter(val => val.trim() !== '');
+
+                if (options.length < 2) throw new Error("A poll must have at least 2 options.");
+
+                toggleLoading('btn-poll', true);
+                
+                const res = await fetch('/api/send-poll', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ jid, name, options })
+                });
+
+                if(!res.ok) throw new Error((await res.json()).error || "Failed to send poll");
+                showNotification('Poll created successfully! 📊', 'success');
+                document.getElementById('poll-form').reset();
+                // Reset to 2 options
+                document.getElementById('poll-options-container').innerHTML = `
+                    <input type="text" class="poll-option" placeholder="Option 1" required>
+                    <input type="text" class="poll-option" placeholder="Option 2" required>
+                `;
+            } catch (err) {
+                showNotification(err.message, 'error');
+            } finally {
+                toggleLoading('btn-poll', false);
+            }
+        }
+
+        async function handleListSubmit(e) {
+            e.preventDefault();
+            try {
+                const jid = getJid();
+                const title = document.getElementById('list-title').value;
+                const desc = document.getElementById('list-desc').value;
+                const btn = document.getElementById('list-btn').value;
+                const options = Array.from(document.querySelectorAll('.list-option'))
+                                    .map(el => el.value)
+                                    .filter(val => val.trim() !== '');
+
+                if (options.length < 1) throw new Error("A list must have at least 1 option.");
+
+                toggleLoading('btn-list', true);
+                
+                const res = await fetch('/api/send-list', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ jid, title, description: desc, buttonText: btn, options })
+                });
+
+                if(!res.ok) throw new Error((await res.json()).error || "Failed to send list");
+                showNotification('List created successfully! 📋', 'success');
+                document.getElementById('list-form').reset();
+                
+                document.getElementById('list-options-container').innerHTML = `
+                    <input type="text" class="list-option" placeholder="Option 1 (e.g. S)" required>
+                    <input type="text" class="list-option" placeholder="Option 2 (e.g. M)" required>
+                    <input type="text" class="list-option" placeholder="Option 3 (e.g. L)" required>
+                `;
+            } catch (err) {
+                showNotification(err.message, 'error');
+            } finally {
+                toggleLoading('btn-list', false);
+            }
+        }
+
+        function addButtonOption() {
+            const container = document.getElementById('btn-options-container');
+            if (container.children.length >= 3) {
+                showNotification('Maximum 3 options allowed for buttons.', 'error');
+                return;
+            }
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'btn-option';
+            input.placeholder = `Option ${container.children.length + 1}`;
+            input.required = true;
+            container.appendChild(input);
+        }
+
+        async function handleButtonSubmit(e) {
+            e.preventDefault();
+            try {
+                const jid = getJid();
+                const text = document.getElementById('btn-question').value;
+                const options = Array.from(document.querySelectorAll('.btn-option'))
+                                    .map(el => el.value)
+                                    .filter(val => val.trim() !== '');
+
+                if (options.length < 1) throw new Error('At least 1 option is required.');
+                if (options.length > 3) throw new Error('Maximum 3 options allowed for buttons.');
+
+                toggleLoading('btn-button-send', true);
+
+                const res = await fetch('/api/send-buttons', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ jid, text, options })
+                });
+
+                if (!res.ok) {
+                    let errorMessage = 'Failed to send buttons (Server error)';
+                    try {
+                        const errData = await res.json();
+                        errorMessage = errData.error || errorMessage;
+                    } catch(e) {
+                        errorMessage = `Network or Server Error: ${res.status} ${res.statusText}. Did you restart the server?`;
+                    }
+                    throw new Error(errorMessage);
+                }
+                
+                showNotification('Buttons sent successfully! 🔘', 'success');
+                document.getElementById('button-form').reset();
+                document.getElementById('btn-options-container').innerHTML = `
+                    <input type="text" class="btn-option" placeholder="Option 1 (e.g. Yes)" required>
+                    <input type="text" class="btn-option" placeholder="Option 2 (e.g. No)" required>
+                `;
+            } catch (err) {
+                showNotification(err.message, 'error');
+            } finally {
+                toggleLoading('btn-button-send', false);
+            }
+        }
+    </script>
+</body>
+</html>
