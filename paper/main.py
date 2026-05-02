@@ -270,6 +270,9 @@ RBAC_TEACHER_PREFIXES: Tuple[str, ...] = (
 RBAC_HOD_PREFIXES: Tuple[str, ...] = (
     "/api/hod",
 )
+# ── Agent Secret (Turnstile bypass for AI agents) ────────────────────────────
+AGENT_SECRET_KEY = (os.getenv("AGENT_SECRET_KEY") or "").strip()
+
 MCP_ENABLED = (os.getenv("MCP_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"})
 
 # ── MCP Hardening Configuration ──────────────────────────────────────────────
@@ -4661,7 +4664,7 @@ class UserAuth(BaseModel):
 
 
 class UserAuthWithTurnstile(UserAuth):
-    turnstile_token: str = Field(..., min_length=1)
+    turnstile_token: Optional[str] = Field(None, min_length=1)
 
 
 class SignupFullIn(BaseModel):
@@ -6368,6 +6371,19 @@ def _resolve_turnstile_keys(request: Optional[Request] = None) -> Tuple[str, str
     site_key = (os.getenv("CLOUDFLARE_SITE_KEY") or "").strip()
     secret = (os.getenv("CLOUDFLARE_SECRET_KEY") or "").strip()
     return site_key, secret
+
+
+def _is_agent_request(request: Optional[Request]) -> bool:
+    """Return True when the request carries a valid x-agent-secret header,
+    allowing AI agent callers to bypass Turnstile verification."""
+    if not AGENT_SECRET_KEY:
+        return False
+    if request is None:
+        return False
+    header_value = (request.headers.get("x-agent-secret") or "").strip()
+    if not header_value:
+        return False
+    return secrets.compare_digest(header_value, AGENT_SECRET_KEY)
 
 
 def verify_turnstile_token(token: str, request: Optional[Request] = None, *, expected_action: Optional[str] = None) -> Dict[str, Any]:
@@ -18594,13 +18610,19 @@ def resolve_or_create_batch(payload: BatchResolveIn):
 
 @academics_router.post("/signup")
 def signup(user: UserAuthWithTurnstile, request: Request):
-    verify_turnstile_token(user.turnstile_token, request=request, expected_action="signup")
+    if not _is_agent_request(request):
+        verify_turnstile_token(user.turnstile_token, request=request, expected_action="signup")
+    else:
+        _security_emit("auth.agent_bypass", request=request, route="/signup")
     return signup_user(user, request=request)
 
 
 @academics_router.post("/login")
 def login(user: UserAuthWithTurnstile, request: Request):
-    verify_turnstile_token(user.turnstile_token, request=request, expected_action="login")
+    if not _is_agent_request(request):
+        verify_turnstile_token(user.turnstile_token, request=request, expected_action="login")
+    else:
+        _security_emit("auth.agent_bypass", request=request, route="/login")
     return login_user(user, request=request)
 
 
