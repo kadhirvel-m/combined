@@ -332,6 +332,80 @@
       ui.logoWrap.textContent = 'LOGO';
     }
 
+    // Fetch the actual degrees → departments → batches from the colleges DB tables
+    async function fetchCollegeDbStructure(apiBase, collegeId) {
+      if (!collegeId) return null;
+      try {
+        const res = await fetch(apiBase + `/api/colleges/${collegeId}/degrees`, {
+          method: 'GET',
+          headers: { ...authHeaders() },
+          credentials: 'include'
+        });
+        if (!res.ok) return null;
+        const data = await res.json().catch(() => []);
+        return Array.isArray(data) ? data : [];
+      } catch (_) { return null; }
+    }
+
+    // Filter hierarchy to only include degrees, departments, and batches that exist in the DB
+    function filterHierarchyByDb(college, dbDegrees) {
+      if (!dbDegrees || !dbDegrees.length) return college;
+
+      // Build lookup sets from the DB structure
+      const dbDegreeNames = new Set(dbDegrees.map(d => String(d?.name || '').trim().toLowerCase()).filter(Boolean));
+      const dbDeptNames = new Set();
+      const dbBatchRanges = new Set();
+
+      for (const degree of dbDegrees) {
+        const departments = Array.isArray(degree?.departments) ? degree.departments : [];
+        for (const dept of departments) {
+          const deptName = String(dept?.name || '').trim().toLowerCase();
+          if (deptName) dbDeptNames.add(deptName);
+          const batches = Array.isArray(dept?.batches) ? dept.batches : [];
+          for (const batch of batches) {
+            // batches from DB have from_year/to_year (or aliased as from/to in JSON)
+            const fromY = batch?.from_year || batch?.from;
+            const toY = batch?.to_year || batch?.to;
+            if (fromY && toY) {
+              dbBatchRanges.add(`${fromY}-${toY}`);
+            }
+            // Also add by name if present
+            const bName = String(batch?.name || '').trim().toLowerCase();
+            if (bName) dbBatchRanges.add(bName);
+          }
+        }
+      }
+
+      // Filter degrees
+      const filteredDegrees = (Array.isArray(college?.degrees) ? college.degrees : [])
+        .filter(degree => dbDegreeNames.has(String(degree?.name || '').trim().toLowerCase()))
+        .map(degree => {
+          // Filter departments within this degree
+          const filteredDepts = (Array.isArray(degree?.departments) ? degree.departments : [])
+            .filter(dept => dbDeptNames.has(String(dept?.name || '').trim().toLowerCase()))
+            .map(dept => {
+              // Filter batches within this department
+              const filteredBatches = (Array.isArray(dept?.batches) ? dept.batches : [])
+                .filter(batch => {
+                  const batchName = String(batch?.name || '').trim().toLowerCase();
+                  return dbBatchRanges.has(batchName);
+                });
+              // Recalculate department count from filtered batches
+              const deptCount = filteredBatches.reduce((sum, b) => sum + Number(b?.count || 0), 0);
+              return { ...dept, batches: filteredBatches, count: deptCount };
+            })
+            .filter(dept => dept.batches.length > 0); // Remove empty depts
+          // Recalculate degree count from filtered departments
+          const degreeCount = filteredDepts.reduce((sum, d) => sum + Number(d?.count || 0), 0);
+          return { ...degree, departments: filteredDepts, count: degreeCount };
+        })
+        .filter(degree => degree.departments.length > 0); // Remove empty degrees
+
+      // Recalculate college count
+      const totalCount = filteredDegrees.reduce((sum, d) => sum + Number(d?.count || 0), 0);
+      return { ...college, degrees: filteredDegrees, count: totalCount };
+    }
+
     async function init() {
       try {
         ui.errorText.classList.add('hidden');
@@ -364,6 +438,15 @@
         const meta = colleges.find(item => String(item?.id || '').trim() === String(target?.id || '').trim()) ||
           colleges.find(item => String(item?.name || '').trim().toLowerCase() === String(target?.name || '').trim().toLowerCase()) ||
           null;
+
+        // Fetch the actual DB structure (degrees, departments, batches) and filter hierarchy
+        const resolvedId = String(target?.id || meta?.id || collegeId || '').trim();
+        if (resolvedId) {
+          const dbDegrees = await fetchCollegeDbStructure(apiBase, resolvedId);
+          if (dbDegrees && dbDegrees.length) {
+            target = filterHierarchyByDb(target, dbDegrees);
+          }
+        }
 
         const displayName = String(target?.name || collegeName || 'College Hierarchy');
         ui.pageTitle.textContent = `${displayName} Hierarchy`;

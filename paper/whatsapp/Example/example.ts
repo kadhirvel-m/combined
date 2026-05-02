@@ -8,9 +8,11 @@ import fs from 'fs'
 import P from 'pino'
 import dns from 'dns'
 import express from 'express'
+import cors from 'cors'
 import multer from 'multer'
 
 const app = express()
+app.use(cors())
 app.use(express.json())
 const upload = multer({ dest: 'uploads/' })
 

@@ -2257,14 +2257,22 @@
                     const AUTH_SENTINEL = '__COOKIE_AUTH__';
                     const tTeach = localStorage.getItem('teacherToken');
                     const tUser = localStorage.getItem('px_token');
+                    // Cookie-based auth returns the sentinel value — treat it as valid auth
                     isTeacher = !!(tTeach && tTeach !== AUTH_SENTINEL);
                     isStudent = !!(tUser && tUser !== AUTH_SENTINEL);
+                    // If we have sentinel values, it means cookie auth is active but role is unknown
+                    const hasCookieAuth = (tTeach === AUTH_SENTINEL || tUser === AUTH_SENTINEL);
+                    if (hasCookieAuth && !isTeacher && !isStudent) {
+                        // Mark as student by default; role detection below will correct if needed
+                        isStudent = true;
+                    }
                 } catch (_) { }
 
                 // Avoid first protected-call 401 by warming auth once when session markers exist.
                 try { await ensureAuthReady(); } catch (_) { }
 
-                if (!isTeacher && !isStudent) {
+                // Only probe role endpoints if we have auth state but unknown role
+                if (!isTeacher && isStudent) {
                     try {
                         const statusRes = await fetchWithTimeout(`${apiBase}/api/teacher/me/status`, { credentials: 'include' });
                         if (statusRes.ok) {
@@ -2272,12 +2280,9 @@
                             resolvedRole = String((statusData && statusData.role) || '').trim().toLowerCase();
                             if (resolvedRole === 'teacher') {
                                 isTeacher = true;
+                                isStudent = false;
                             } else if (resolvedRole === 'hod') {
                                 isHod = true;
-                                isStudent = true;
-                            } else {
-                                // Any authenticated non-teacher role should use the student/admin CTA path (NoteX).
-                                isStudent = true;
                             }
                         }
                     } catch (_) { }

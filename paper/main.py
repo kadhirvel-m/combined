@@ -238,6 +238,7 @@ AUTH_PUBLIC_EXACT_ROUTES: Set[str] = {
     "/api/signup/full",
     "/api/teacher/signup",
     "/api/hod/signup",
+    "/api/leaderboard",
     "/.well-known/oauth-protected-resource",
     # MCP health endpoints (F7) — public for monitoring/heartbeat
     "/mcp/health",
@@ -8088,7 +8089,7 @@ def _fetch_profile_related(profile_id: str, table: str, order_by: Optional[List[
 
 def _update_profile_me(token: Optional[str], fields: dict):
     # Ensure a profile exists (creates a minimal one for OAuth users)
-    _, profile_id = _ensure_user_and_profile(token)
+    user_id, profile_id = _ensure_user_and_profile(token)
     supabase = get_service_client()
     # allow base fields first
     allowed = {
@@ -8125,7 +8126,8 @@ def _update_profile_me(token: Optional[str], fields: dict):
                 payload["batch_from"] = int(batch_from)
                 payload["batch_to"] = int(batch_to)
 
-    update_payload = _supabase_payload(payload)
+    # We manually process payload to preserve explicitly passed None values (to clear fields)
+    update_payload = {k: _to_supabase_json(v) for k, v in payload.items()}
     if update_payload:
         retry_payload = dict(update_payload)
         fallback_keys = {"college_id", "department_id", "batch_id", "batch_from", "batch_to"}
@@ -8187,6 +8189,7 @@ def _update_profile_me(token: Optional[str], fields: dict):
     if publications_payload is not None:
         prepared = _prepare_publication_rows(publications_payload if isinstance(publications_payload, list) else None)
         _sync_profile_collection(profile_id, "user_publications", prepared)
+    _me_response_cache_invalidate(user_id)
     return {"updated": True}
 
 
@@ -10592,6 +10595,7 @@ def list_admin_users(
             "user_id": user_id_val,
             "name": r.get("name"),
             "email": r.get("email"),
+            "phone": r.get("phone"),
             "role": role_map.get(r.get("auth_user_id"), "student"),
             "semester": semester_val,
             "regno": regno_val,
@@ -12221,6 +12225,58 @@ def admin_delete_usage_limit(rule_id: str, authorization: Optional[str] = Header
     if getattr(d, "error", None):
         raise HTTPException(status_code=500, detail=f"Delete usage rule failed: {d.error}")
     return {"ok": True}
+
+@academics_router.get("/api/admin/staff-directory", summary="Admin: list all staff members (admin, employee, hod, moderator)")
+def admin_staff_directory(authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    supabase = get_service_client()
+    
+    # 1. Fetch roles
+    roles_res = supabase.table("admin_roles").select("auth_user_id,role").in_("role", ["admin", "employee", "hod", "moderator"]).execute()
+    if getattr(roles_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Failed to fetch admin roles: {roles_res.error}")
+    roles = getattr(roles_res, "data", []) or []
+    
+    if not roles:
+        return {"staff": []}
+        
+    uids = [str(r["auth_user_id"]) for r in roles if r.get("auth_user_id")]
+    
+    # 2. Fetch profiles
+    profiles_map = {}
+    if uids:
+        def _chunked(lst, n):
+            for i in range(0, len(lst), n):
+                yield lst[i:i + n]
+                
+        for chunk in _chunked(uids, 150):
+            res = supabase.table("user_profiles").select("auth_user_id,name,email,phone,colleges(name),departments(name)").in_("auth_user_id", chunk).execute()
+            if not getattr(res, "error", None):
+                for p in (getattr(res, "data", []) or []):
+                    profiles_map[str(p["auth_user_id"])] = p
+
+    # 3. Build response
+    staff_list = []
+    for r in roles:
+        uid = str(r["auth_user_id"])
+        prof = profiles_map.get(uid, {})
+        
+        # Safely extract college and department names from joined data
+        c_name = prof.get("colleges", {}).get("name") if isinstance(prof.get("colleges"), dict) else ""
+        d_name = prof.get("departments", {}).get("name") if isinstance(prof.get("departments"), dict) else ""
+        
+        staff_list.append({
+            "id": uid,
+            "role": r.get("role", "employee"),
+            "name": prof.get("name") or prof.get("email") or "Unknown Staff",
+            "email": prof.get("email") or "",
+            "phone": prof.get("phone") or "",
+            "college_name": c_name,
+            "department_name": d_name,
+            "profile_image_url": prof.get("profile_image_url") or ""
+        })
+        
+    return {"staff": staff_list}
 
 
 @academics_router.get("/api/admin/manual-access/search", summary="Admin: search users for manual access")
@@ -14648,6 +14704,7 @@ class TeacherProfileUpsertIn(BaseModel):
     college_id: Optional[uuid.UUID] = None
     department_id: Optional[uuid.UUID] = None
     profile_image_url: Optional[str] = None  # normally set via upload endpoint
+    phone: Optional[str] = Field(None, max_length=20)  # phone number for WhatsApp messaging
 
 # ================= Teacher Classes CRUD Models ==================
 class TeacherClassIn(BaseModel):
@@ -33977,7 +34034,11 @@ def create_app() -> FastAPI:
                 "max-age=31536000; includeSubDomains; preload",
             )
 
-            csp = "; ".join([
+            # Determine if we're on localhost to adjust CSP accordingly.
+            _csp_host = (request.url.hostname or "").lower()
+            _csp_is_local = _csp_host in {"localhost", "127.0.0.1", "::1"}
+
+            _csp_directives = [
                 "default-src 'self'",
                 "base-uri 'self'",
                 "object-src 'none'",
@@ -33985,13 +34046,17 @@ def create_app() -> FastAPI:
                 "img-src 'self' data: blob: https:",
                 "font-src 'self' https://fonts.gstatic.com https://fonts.googleapis.com",
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-                "script-src 'self' 'unsafe-inline' https://www.google.com https://www.gstatic.com https://challenges.cloudflare.com",
-                "connect-src 'self' https://*.paperx.tech https://*.ondigitalocean.app https://*.supabase.co https://api.openai.com https://generativelanguage.googleapis.com https://www.googleapis.com",
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://www.google.com https://www.gstatic.com https://challenges.cloudflare.com https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com",
+                "connect-src 'self' https://*.paperx.tech https://*.ondigitalocean.app https://*.supabase.co https://api.openai.com https://generativelanguage.googleapis.com https://www.googleapis.com https://cdn.jsdelivr.net https://unpkg.com http://127.0.0.1:* http://localhost:*",
                 "frame-src 'self' https://challenges.cloudflare.com https://www.google.com",
                 "worker-src 'self' blob:",
                 "form-action 'self'",
-                "upgrade-insecure-requests",
-            ])
+            ]
+            # upgrade-insecure-requests breaks localhost dev (forces HTTP→HTTPS)
+            if not _csp_is_local:
+                _csp_directives.append("upgrade-insecure-requests")
+
+            csp = "; ".join(_csp_directives)
             response.headers.setdefault("Content-Security-Policy", csp)
 
             # Detection telemetry for repeated authz/rl failures.
@@ -34058,6 +34123,7 @@ def create_app() -> FastAPI:
         token = _bearer_token_from_header(request.headers.get("authorization"))
         if not token:
             token = _token_from_cookie(request, AUTH_ACCESS_COOKIE_NAME)
+
         if not token and method == "GET" and path in {
             "/generate/stream",
             "/api/notes/generate/stream",

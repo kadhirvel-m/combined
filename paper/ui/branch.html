@@ -926,7 +926,17 @@
         }
 
         if (serverPayload && Array.isArray(serverPayload.hierarchy)) {
-          lastHierarchy = normalizeHierarchyPayload(serverPayload.hierarchy);
+          let normalized = normalizeHierarchyPayload(serverPayload.hierarchy);
+          // Filter: only show colleges that actually exist in the colleges DB table
+          if (colleges.length) {
+            const dbCollegeNames = new Set(colleges.map(c => collegeNameKey(c?.name)));
+            const dbCollegeIds = new Set(colleges.map(c => String(c?.id || '').trim()).filter(Boolean));
+            normalized = normalized.filter(college => {
+              if (college.id && dbCollegeIds.has(String(college.id).trim())) return true;
+              return dbCollegeNames.has(collegeNameKey(college.name));
+            });
+          }
+          lastHierarchy = normalized;
           rerenderWithSearch();
           const totals = computeStatsFromHierarchy(lastHierarchy);
           setStatus(`Loaded ${totals.students} students`, 'check_circle');
@@ -939,7 +949,17 @@
         const studentsOnly = dedupeUsersByIdentity(normalized.filter(isStudentRecord));
         lastStudents = studentsOnly;
         const built = buildHierarchy(studentsOnly);
-        lastHierarchy = mapTreeToHierarchy(built.tree);
+        let fallbackHierarchy = mapTreeToHierarchy(built.tree);
+        // Filter: only show colleges that actually exist in the colleges DB table
+        if (colleges.length) {
+          const dbCollegeNames = new Set(colleges.map(c => collegeNameKey(c?.name)));
+          const dbCollegeIds = new Set(colleges.map(c => String(c?.id || '').trim()).filter(Boolean));
+          fallbackHierarchy = fallbackHierarchy.filter(college => {
+            if (college.id && dbCollegeIds.has(String(college.id).trim())) return true;
+            return dbCollegeNames.has(collegeNameKey(college.name));
+          });
+        }
+        lastHierarchy = fallbackHierarchy;
 
         rerenderWithSearch();
         setStatus(`Loaded ${studentsOnly.length} students (fallback)`, 'check_circle');

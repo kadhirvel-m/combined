@@ -3235,8 +3235,8 @@
                             <input name="edu_regno" type="text" placeholder="22TN0049" class="w-full min-w-0 rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 px-3 py-2" />
             </label>
                         <label class="grid gap-1 min-w-0">
-              <span class="text-xs text-black/70 dark:text-white/70">Grade / GPA <span class="text-black/45 dark:text-white/45">Optional</span></span>
-                            <input name="edu_grade" type="text" placeholder="9.1 CGPA" class="w-full min-w-0 rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 px-3 py-2" />
+              <span class="text-xs text-black/70 dark:text-white/70">Mobile Number *</span>
+                            <input name="phone" required type="tel" placeholder="9876543210" maxlength="10" pattern="[0-9]{10}" class="w-full min-w-0 rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 px-3 py-2" />
             </label>
           </div>
         </div>
@@ -3265,7 +3265,7 @@
             const batchCustomInput = row.querySelector('[data-role="edu-batch-custom"]');
             const currentSemesterInput = row.querySelector('input[name="edu_current_semester"]');
             const regnoInput = row.querySelector('input[name="edu_regno"]');
-            const gradeInput = row.querySelector('input[name="edu_grade"]');
+            const phoneInput = row.querySelector('input[name="phone"]');
 
             if (!collegeSelect || !degreeSelect || !departmentSelect || !batchSelect) return;
 
@@ -3283,7 +3283,7 @@
             if (hiddenBatch) hiddenBatch.value = initialValues.batchRange;
             if (currentSemesterInput && data.current_semester) currentSemesterInput.value = String(data.current_semester);
             if (regnoInput && data.regno) regnoInput.value = String(data.regno);
-            if (gradeInput && data.grade) gradeInput.value = String(data.grade);
+            if (phoneInput && data.phone) phoneInput.value = String(data.phone);
 
             const colleges = await __pxEduLoadCollegesList().catch(() => []);
             const collegeOptions = (colleges || []).map(col => ({ value: col.id, label: col.name }));
@@ -3652,7 +3652,7 @@
                     batch_range: row.querySelector('input[name="edu_batch_range"]').value || null,
                     regno: row.querySelector('input[name="edu_regno"]').value.trim() || null,
                     current_semester: (Number.isFinite(current_semester) && current_semester > 0) ? current_semester : null,
-                    grade: row.querySelector('input[name="edu_grade"]').value.trim() || null,
+                    grade: row.querySelector('input[name="edu_grade"]')?.value.trim() || null,
                     activities: null,
                     description: null,
                     college_id,
@@ -3667,6 +3667,7 @@
         function __pxEduNeedsCompletion(profile) {
             const list = Array.isArray(profile?.education_entries) ? profile.education_entries : [];
             const hasName = Boolean(String(profile?.name || '').trim());
+            const hasPhone = Boolean(String(profile?.phone || '').trim());
             const hasEducation = list.some(ed => {
                 const school = (ed?.school || '').trim();
                 const degree = (ed?.degree || '').trim();
@@ -3676,7 +3677,7 @@
                 const semester = Number(ed?.current_semester);
                 return school && degree && department && batch && section && Number.isFinite(semester) && semester > 0;
             });
-            return !hasName || !hasEducation;
+            return !hasName || !hasEducation || !hasPhone;
         }
 
         function __pxEduShowStatus(message, ok = true) {
@@ -3752,7 +3753,7 @@
             wrap.innerHTML = '';
             const node = __pxEduBuildEducationRowNode();
             wrap.appendChild(node);
-            await __pxEduInitializeEducationRow(node, profile?.education_entries?.[0] || {});
+            await __pxEduInitializeEducationRow(node, { ...(profile?.education_entries?.[0] || {}), phone: profile?.phone });
             wrap.dataset.ready = 'true';
         }
 
@@ -3768,12 +3769,41 @@
             await __pxEduEnsureBound();
             const { modal } = __pxEduEls();
             if (!modal) return;
-            if (!__pxEduNeedsCompletion(profile)) {
+            
+            const list = Array.isArray(profile?.education_entries) ? profile.education_entries : [];
+            const hasName = Boolean(String(profile?.name || '').trim());
+            const hasPhone = Boolean(String(profile?.phone || '').trim());
+            const hasEducation = list.some(ed => {
+                const school = (ed?.school || '').trim();
+                const degree = (ed?.degree || '').trim();
+                const department = (ed?.department || '').trim();
+                const batch = (ed?.batch_range || '').trim();
+                const section = (ed?.section || '').trim();
+                const semester = Number(ed?.current_semester);
+                return school && degree && department && batch && section && Number.isFinite(semester) && semester > 0;
+            });
+
+            const phoneModal = document.getElementById('phoneRequiredModal');
+
+            if (hasName && hasEducation && hasPhone) {
                 __pxEduCloseModal();
+                if (phoneModal) phoneModal.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
                 return;
             }
+
+            if (hasName && hasEducation && !hasPhone) {
+                __pxEduCloseModal();
+                if (phoneModal) {
+                    phoneModal.classList.remove('hidden');
+                    document.body.classList.add('overflow-hidden');
+                }
+                return;
+            }
+
             await __pxEduEnsureModalReady(profile);
             __pxEduOpenModal();
+            if (phoneModal) phoneModal.classList.add('hidden');
         }
 
         async function __pxEduEnsureBound() {
@@ -3828,16 +3858,24 @@
 
                     const entries = __pxEduCollectEducationData(wrap);
                     const entry = entries[0] || {};
+                    const phoneInput = wrap.querySelector('input[name="phone"]');
+                    let enteredPhone = (phoneInput?.value || '').trim().replace(/\D/g, '');
+
                     const requiredOk = Boolean((entry.school || '').trim())
                         && Boolean((entry.degree || '').trim())
                         && Boolean((entry.department || '').trim())
                         && Boolean((entry.batch_range || '').trim())
                         && Boolean((entry.section || '').trim())
                         && Number.isFinite(Number(entry.current_semester))
-                        && Number(entry.current_semester) > 0;
+                        && Number(entry.current_semester) > 0
+                        && enteredPhone.length === 10;
 
                     if (!requiredOk) {
-                        __pxEduShowStatus('Please select college, degree, department, batch, section and current semester.', false);
+                        if (enteredPhone.length > 0 && enteredPhone.length !== 10) {
+                            __pxEduShowStatus('Please enter a valid 10-digit mobile number.', false);
+                            return;
+                        }
+                        __pxEduShowStatus('Please select college, degree, department, batch, section, current semester and provide mobile number.', false);
                         return;
                     }
 
@@ -3845,7 +3883,7 @@
                     saveBtn.classList.add('opacity-70');
                     __pxEduShowStatus('Saving…', true);
 
-                    const payload = __pxBuildProfileUpdatePayload({ ...profile, name: enteredName }, [entry]);
+                    const payload = __pxBuildProfileUpdatePayload({ ...profile, name: enteredName, phone: enteredPhone }, [entry]);
                     const res = await fetch(`${API_BASE}/api/profile/me`, {
                         method: 'PUT',
                         headers: { ...__pxEduGetAuthHeaders(), 'Content-Type': 'application/json' },
@@ -3919,6 +3957,101 @@
             </div>
         </div>
     </div>
+
+    <!-- Phone required modal (shown only when phone is missing but education is present) -->
+    <div id="phoneRequiredModal" class="hidden fixed inset-0 z-50">
+        <div class="absolute inset-0 bg-black/70"></div>
+        <div class="relative h-full w-full flex items-center justify-center p-4">
+            <div data-edu-modal-panel
+                class="w-full max-w-sm rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 text-neutral-900 dark:text-white shadow-card backdrop-blur supports-[backdrop-filter]:backdrop-blur-xl p-6 overflow-y-auto overflow-x-hidden">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <h3 class="text-lg font-semibold">Complete your profile</h3>
+                        <p class="text-xs text-black/60 dark:text-white/60 mt-1">Add your mobile number to continue.</p>
+                    </div>
+                </div>
+
+                <div id="phoneRequiredStatus"
+                    class="hidden mt-3 text-xs rounded-lg border border-black/10 dark:border-white/10 px-3 py-2"></div>
+
+                <label class="mt-4 grid gap-1 min-w-0">
+                    <span class="text-xs text-black/70 dark:text-white/70">Mobile Number *</span>
+                    <input id="phoneRequiredInput" type="tel" placeholder="9876543210" maxlength="10" pattern="[0-9]{10}"
+                        class="w-full min-w-0 rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 px-3 py-2" />
+                </label>
+
+                <div class="mt-5 flex items-center justify-end gap-2">
+                    <button id="phoneRequiredSaveBtn" type="button"
+                        class="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">
+                        <span class="material-symbols-rounded text-[18px]">save</span>
+                        Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const phoneSaveBtn = document.getElementById('phoneRequiredSaveBtn');
+            if (phoneSaveBtn) {
+                phoneSaveBtn.addEventListener('click', async () => {
+                    try {
+                        const profile = window.__PX_PROFILE_SNAPSHOT || {};
+                        const phoneInput = document.getElementById('phoneRequiredInput');
+                        const statusEl = document.getElementById('phoneRequiredStatus');
+                        const showStatus = (msg, ok) => {
+                            statusEl.classList.remove('hidden');
+                            statusEl.textContent = msg;
+                            statusEl.classList.toggle('border-rose-400/40', !ok);
+                            statusEl.classList.toggle('text-rose-600', !ok);
+                            statusEl.classList.toggle('border-emerald-400/40', ok);
+                            statusEl.classList.toggle('text-emerald-600', ok);
+                        };
+
+                        let enteredPhone = (phoneInput?.value || '').trim().replace(/\D/g, '');
+                        if (enteredPhone.length !== 10) {
+                            showStatus('Please enter a valid 10-digit mobile number.', false);
+                            return;
+                        }
+
+                        phoneSaveBtn.disabled = true;
+                        phoneSaveBtn.classList.add('opacity-70');
+                        showStatus('Saving…', true);
+
+                        const payload = __pxBuildProfileUpdatePayload({ ...profile, phone: enteredPhone }, profile.education_entries || []);
+                        const res = await fetch(`${window.API_BASE || 'http://127.0.0.1:8000'}/api/profile/me`, {
+                            method: 'PUT',
+                            headers: { ...__pxEduGetAuthHeaders(), 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload),
+                        });
+                        const out = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                            showStatus(out?.detail || 'Failed to save mobile number.', false);
+                            return;
+                        }
+
+                        showStatus('Saved!', true);
+                        document.getElementById('phoneRequiredModal').classList.add('hidden');
+                        document.body.classList.remove('overflow-hidden');
+                        if (typeof loadProfileAndProgress === 'function') await loadProfileAndProgress();
+                    } catch (err) {
+                        console.error(err);
+                        const statusEl = document.getElementById('phoneRequiredStatus');
+                        if (statusEl) {
+                            statusEl.classList.remove('hidden');
+                            statusEl.textContent = 'Failed to save mobile number.';
+                            statusEl.classList.add('border-rose-400/40', 'text-rose-600');
+                        }
+                    } finally {
+                        phoneSaveBtn.disabled = false;
+                        phoneSaveBtn.classList.remove('opacity-70');
+                    }
+                });
+            }
+        });
+    </script>
+    
     <!-- Unified Toggle All Logic -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
