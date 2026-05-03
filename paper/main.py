@@ -217,6 +217,7 @@ RATE_LIMIT_MAX_BUCKETS = max(500, int(os.getenv("RATE_LIMIT_MAX_BUCKETS", "20000
 
 RATE_LIMIT_LOGIN_ROUTES: Set[str] = {
     "/login",
+    "/api/agent/login",
     "/api/teacher/login",
 }
 RATE_LIMIT_AUTH_ROUTES: Set[str] = {
@@ -233,6 +234,7 @@ AUTH_PUBLIC_EXACT_ROUTES: Set[str] = {
     "/health",
     "/signup",
     "/login",
+    "/api/agent/login",
     "/refresh",
     "/logout",
     "/api/signup/full",
@@ -4664,7 +4666,7 @@ class UserAuth(BaseModel):
 
 
 class UserAuthWithTurnstile(UserAuth):
-    turnstile_token: Optional[str] = Field(None, min_length=1)
+    turnstile_token: Optional[str] = None
 
 
 class SignupFullIn(BaseModel):
@@ -18623,6 +18625,17 @@ def login(user: UserAuthWithTurnstile, request: Request):
         verify_turnstile_token(user.turnstile_token, request=request, expected_action="login")
     else:
         _security_emit("auth.agent_bypass", request=request, route="/login")
+    return login_user(user, request=request)
+
+
+@academics_router.post("/api/agent/login", summary="Agent login — bypasses Turnstile via x-agent-secret header")
+def agent_login(user: UserAuth, request: Request):
+    """Dedicated login endpoint for AI agents.
+    Requires a valid x-agent-secret header matching the AGENT_SECRET_KEY env var.
+    No turnstile_token is needed in the request body."""
+    if not _is_agent_request(request):
+        raise HTTPException(status_code=403, detail="Invalid or missing x-agent-secret header")
+    _security_emit("auth.agent_bypass", request=request, route="/api/agent/login")
     return login_user(user, request=request)
 
 
