@@ -1,3 +1,43 @@
+"""
+Tool Search Service - AI-Powered Tool Discovery
+
+This is a complete standalone FastAPI application that helps users discover
+tools with student offers, education discounts, and free plans using AI agents.
+
+Key Features:
+- Uses AutoGen AI agents for intelligent search parsing
+- Integrates with SerpAPI for web search
+- Returns structured JSON results
+- Can run independently as a microservice
+
+Differences from main.py:
+- This uses AutoGen agents for AI-powered result parsing
+- Main.py uses direct SerpAPI integration (simpler, faster)
+- This is a standalone app; main.py is the full TuneX platform
+
+Usage:
+    # Run as standalone service
+    uvicorn refers:app --host 0.0.0.0 --port 8000 --reload
+    
+    # Or import into another app
+    from refers import app as tool_search_app
+
+Environment Variables:
+    SERPAPI_API_KEY - Required for web search functionality
+    OPENAI_API_KEY - Required for AI agent functionality
+    LLM_MODEL - Model name (default: "gpt-4o-mini")
+    PORT - Port to run on (default: 8000)
+
+Endpoints:
+    GET /health - Health check
+    POST /search - Search for tools
+        Request: {"query": "project management tools"}
+        Response: {"results": [{"title": "...", "link": "...", "snippet": "..."}]}
+
+Deployment:
+    docker run -e SERPAPI_API_KEY=xxx -e OPENAI_API_KEY=yyy -p 8000:8000 tool-search
+"""
+
 # main.py
 import os
 import json

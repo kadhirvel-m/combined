@@ -1,3 +1,36 @@
+"""
+TuNe AI Chat Router - Standalone Module
+
+This module provides a reusable FastAPI router for the TuNe AI chatbot functionality.
+It can be used independently or mounted into any FastAPI application.
+
+Features:
+- OpenAI-powered conversational AI
+- Context-aware responses (page, URL)
+- Fallback responses when AI is unavailable
+- Platform-specific guidance for TuNe X
+
+Usage:
+    # Option 1: Mount into existing FastAPI app
+    from fastapi import FastAPI
+    from chat_ai import router
+    
+    app = FastAPI()
+    app.include_router(router, prefix="/api/chat", tags=["chat"])
+    
+    # Option 2: Run as standalone service
+    # uvicorn chat_ai:router --reload
+
+Environment Variables:
+    OPENAI_API_KEY - OpenAI API key (optional, falls back to hardcoded responses)
+    OPENAI_MODEL - Model name (default: "gpt-4o-mini")
+
+Endpoints:
+    POST /chat - Send chat message and receive AI response
+        Request: {"messages": [...], "context": {"page": "...", "url": "..."}}
+        Response: {"message": {"role": "assistant", "content": "..."}}
+"""
+
 from typing import List, Optional, Dict, Any
 import os
 import json
