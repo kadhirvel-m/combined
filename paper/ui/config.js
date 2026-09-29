@@ -1,13 +1,13 @@
 // Global API base config for UI pages
 // Priority:
 // 1) LocalStorage key 'API_BASE'
-// 2) If running on localhost/127.0.0.1, use local FastAPI default http://127.0.0.1:8000
+// 2) If running on localhost/127.0.0.1, use local FastAPI default http://0.0.0.0:10000
 // 3) Fallback to production backend
 (function () {
   try {
     var pageHost = (typeof location !== 'undefined' && location.hostname) ? location.hostname : '';
     var isLocalPageHost = /^(localhost|127\.0\.0\.1|::1)$/i.test(pageHost);
-    var PROD_API_BASE = 'http://127.0.0.1:8000';
+    var PROD_API_BASE = 'http://0.0.0.0:10000';
 
     function isKnownBadProdApiBase(urlLike) {
       try {
@@ -1006,7 +1006,7 @@
 
 (function () {
   window.__TUNE_AI_ENABLED = false;
-  window.__CHAT_API_BASE = (window.__API_BASE || 'http://127.0.0.1:8000') + '/api/tune-ai';
+  window.__CHAT_API_BASE = (window.__API_BASE || 'http://0.0.0.0:10000') + '/api/tune-ai';
 })();
 
 (function () {
@@ -1060,7 +1060,7 @@
   ready(function initTuNeAI() {
     if (document.getElementById('tune-ai-panel')) return; // already injected
 
-    var API = (window.__CHAT_API_BASE || ((window.__API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '') + '/api/tune-ai')).replace(/\/$/, '');
+    var API = (window.__CHAT_API_BASE || ((window.__API_BASE || 'http://0.0.0.0:10000').replace(/\/$/, '') + '/api/tune-ai')).replace(/\/$/, '');
     var keyOpen = 'tune-ai-open:' + (location && location.pathname || '/');
     var keyMsgs = 'tune-ai-msgs:' + (location && location.pathname || '/');
 

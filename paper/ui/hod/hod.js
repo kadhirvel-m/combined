@@ -1,6 +1,6 @@
 // Shared helpers for HOD portal pages
 (function(){
-  const API_BASE = (window.API_BASE || window.__API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+  const API_BASE = (window.API_BASE || window.__API_BASE || 'http://0.0.0.0:10000').replace(/\/$/, '');
 
   function normalizeToken(v){
     const raw = String(v || '').trim();

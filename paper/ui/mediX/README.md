@@ -1,6 +1,7 @@
 # Medix Agentic RAG
 
 ## Pages
+- `ui/heart.html` → Heart learning workspace: 3D anatomy, physiology/ECG labs, 54 MBBS lessons, clinical cases and active recall
 - `ui/mediX/upload.html` → upload PDF, semantic chunking, vector indexing
 - `ui/mediX/chatbot.html` → agentic RAG chat over indexed sources
 - `ui/mediX/sources.html` → browse/delete indexed sources

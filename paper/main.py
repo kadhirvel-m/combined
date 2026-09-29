@@ -34335,7 +34335,7 @@ def create_app() -> FastAPI:
             "https://starfish-app-mu3b8.ondigitalocean.app",
             "https://uppzpkmpxgyipjzcskva.supabase.co",
             "http://127.0.0.1:5500",
-            "http://127.0.0.1:8000",
+            "http://0.0.0.0:10000",
             "http://localhost:5500",
             "http://localhost:8000",
             "http://localhost:8001",

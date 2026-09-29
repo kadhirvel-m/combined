@@ -1,5 +1,5 @@
 (function(){
-  const API_BASE = ((window.__API_BASE || window.API_BASE || '') + '').replace(/\/$/, '') || 'http://127.0.0.1:8000';
+  const API_BASE = ((window.__API_BASE || window.API_BASE || '') + '').replace(/\/$/, '') || 'http://0.0.0.0:10000';
   const COLLAGE_CTX_KEY = 'collage_ctx_v1';
   const COLLAGE_PATH_MARKER = '/ui/collage/';
   const SENSITIVE_QUERY_KEYS = new Set([

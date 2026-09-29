@@ -26,7 +26,7 @@
  *    or call window.__PX_NAV_APPLY(profile) afterwards.
  */
 (function() {
-  const API = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+  const API = (window.API_BASE || 'http://0.0.0.0:10000').replace(/\/$/, '');
   const USER_TOKEN_KEY = 'px_token';
   const TEACHER_TOKEN_KEY = 'teacherToken';
   const REFRESH_TOKEN_KEY = 'px_refresh_token';

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Heart — The cardiac atlas · MediX</title>
+  <meta name="description" content="An in-depth cardiac learning workspace for MBBS students. Explore real 3D anatomy, pressure–volume loops, ECGs, clinical cases, pharmacology and active recall.">
+  <meta name="theme-color" content="#f6f5f1">
+  <link rel="icon" href="assets/img/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/heart/heart.css">
+  <script type="importmap">{"imports":{"three":"./assets/vendor/three/three.module.min.js","three/addons/":"./assets/vendor/three/addons/"}}</script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to learning workspace</a>
+  <aside class="sidebar" aria-label="Learning navigation">
+    <a class="brand" href="mediX/chatbot.html"><span class="brand-symbol">m<span>✳</span></span> medi<span class="brand-x">X</span><span class="brand-sub">LEARN</span></a>
+    <div class="course-label">YOUR LEARNING SPACE</div>
+    <a class="course-name" href="#atlas"><span class="course-icon">♥</span><span>Cardiovascular system<small>MBBS · Integrated learning</small></span></a>
+    <nav id="navigation" aria-label="Study tools">
+      <a class="nav-item active" href="#atlas" data-view="atlas"><span class="nav-icon">◈</span>3D anatomy atlas<span class="nav-arrow">↗</span></a>
+      <a class="nav-item" href="#physiology" data-view="physiology"><span class="nav-icon">∿</span>Physiology lab</a>
+      <a class="nav-item" href="#ecg" data-view="ecg"><span class="nav-icon">ϟ</span>ECG & electrophysiology</a>
+      <a class="nav-item" href="#cases" data-view="cases"><span class="nav-icon">⊕</span>Clinical cases</a>
+      <a class="nav-item" href="#curriculum" data-view="curriculum"><span class="nav-icon">▤</span>Complete curriculum</a>
+      <a class="nav-item" href="#recall" data-view="recall"><span class="nav-icon">⌘</span>Active recall</a>
+      <a class="nav-item" href="#references" data-view="references"><span class="nav-icon">↗</span>References & model</a>
+    </nav>
+    <div class="sidebar-bottom"><div class="progress-title">Your study progress <strong id="progress-percent">0%</strong></div><progress id="course-progress" max="100" value="0" aria-label="Curriculum completion"></progress><p id="progress-caption">0 lessons completed</p><a href="#curriculum" class="continue-link">Continue learning <span>→</span></a><small>Progress is saved on this device.</small></div>
+    <a class="back-link" href="mediX/chatbot.html">← Back to MediX</a>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><div class="breadcrumb">Medicine <span>/</span> Cardiovascular <span>/</span> <strong id="breadcrumb-current">Anatomy atlas</strong></div><div class="topbar-right"><span class="study-badge"><i></i> MBBS STUDY EDITION</span><button class="icon-button" id="search-toggle" aria-label="Search curriculum" title="Search curriculum ( / )">⌕</button><span class="avatar" aria-label="Medical student">MS</span></div></header>
+    <main id="main" tabindex="-1">
+      <div class="page-heading"><div><div class="eyebrow">THE CARDIAC ATLAS <span>01 — CARDIOVASCULAR</span></div><h1>The heart.<em> Understood.</em></h1><p>From its first beat to clinical practice. Explore, experiment, and connect the dots.</p></div><a class="button button-dark heading-button" href="#curriculum">Explore the curriculum <span>↗</span></a></div>
+      <div class="mobile-nav" aria-label="Study sections"><select id="mobile-view" aria-label="Choose study section"><option value="atlas">3D anatomy atlas</option><option value="physiology">Physiology lab</option><option value="ecg">ECG studio</option><option value="cases">Clinical cases</option><option value="curriculum">Complete curriculum</option><option value="recall">Active recall</option><option value="references">References</option></select></div>
+      <section id="view-atlas" class="view" aria-labelledby="atlas-title">
+        <div class="section-bar"><h2 id="atlas-title">Anatomy, in another dimension.</h2><span class="subtle">Interact with the real thing.</span></div>
+        <div class="atlas-layout">
+          <div class="model-panel" id="model-panel">
+            <div class="viewer-heading"><span class="viewer-tag"><i></i> LIVE 3D EXPLORER</span><span id="model-view-label">Anterior view</span></div>
+            <div id="heart-viewer" role="img" aria-label="Interactive anatomical heart model. Drag to rotate, scroll to zoom, or use the view buttons and structure list."><div class="model-loading" id="model-status"><span class="loader"></span>Loading anatomical model…<small>Human Reference Atlas · 1.7 MB</small></div></div>
+            <div class="model-caption"><span>HUMAN HEART</span><small>Visible Human dataset · Female</small></div>
+            <div class="orientation"><span>SUPERIOR ↑</span><span>R <i>+</i> L</span></div>
+            <div class="viewer-tools"><button id="model-rotate" class="viewer-button" aria-pressed="false" title="Auto-rotate model">↻ <span>Rotate</span></button><button id="model-reset" class="viewer-button" title="Reset camera and anatomy controls">⤢ <span>Reset</span></button><button id="model-fullscreen" class="viewer-button" title="Expand 3D viewer">⛶ <span>Expand</span></button></div>
+            <div class="viewer-footer"><span>Drag to rotate <i>·</i> Scroll / pinch to zoom <i>·</i> Click a structure</span><span class="model-license"><a href="#references">HRA · CC BY 4.0 ↗</a></span></div>
+          </div>
+          <aside class="anatomy-controls">
+            <div class="control-head"><span class="eyebrow">EXPLORE THE ANATOMY</span><span class="small-pill">14 meshes</span></div>
+            <div class="segmented" id="model-views" aria-label="Camera view"><button data-camera="anterior" class="active" aria-pressed="true">Anterior</button><button data-camera="posterior" aria-pressed="false">Posterior</button><button data-camera="superior" aria-pressed="false">Superior</button></div>
+            <label class="field-label" for="structure-select">Structure <span>SELECT TO HIGHLIGHT</span></label><select id="structure-select"><option value="all">Whole heart</option><optgroup label="Chambers"><option value="left_ventricle">Left ventricle</option><option value="right_ventricle">Right ventricle</option><option value="left_cardiac_atrium">Left atrium</option><option value="right_cardiac_atrium">Right atrium</option></optgroup><optgroup label="Valves & internal anatomy"><option value="mitral_valve">Mitral valve</option><option value="tricuspid_valve">Tricuspid valve</option><option value="aortic_valve">Aortic valve</option><option value="pulmonary_valve">Pulmonary valve</option><option value="interventricular_septum">Interventricular septum</option><option value="papillary_muscle">Papillary muscles</option></optgroup></select>
+            <label class="switch-row"><span>Isolate selected structure<small>Hide surrounding anatomy</small></span><input type="checkbox" id="isolate-toggle" role="switch"></label>
+            <label class="switch-row"><span>Color by structure<small>Differentiate chambers & valves</small></span><input type="checkbox" id="color-toggle" role="switch" checked></label>
+            <label class="slider-label" for="opacity">Surrounding opacity <output id="opacity-value">100%</output></label><input id="opacity" type="range" min="10" max="100" value="100">
+            <label class="slider-label" for="cutaway">Anatomical cutaway <output id="cutaway-value">Off</output></label><input id="cutaway" type="range" min="0" max="100" value="0">
+            <div class="anatomy-note" id="structure-note" aria-live="polite"></div>
+            <a class="text-link" href="#curriculum/gross-anatomy">Study the detailed anatomy <span>→</span></a>
+          </aside>
+        </div>
+        <div class="atlas-bottom"><div class="blood-flow-card"><div class="card-heading"><div><span class="eyebrow">FOLLOW THE FLOW</span><h3>One continuous circuit.</h3></div><button id="flow-play" class="small-button" aria-pressed="false">▶ Follow blood flow</button></div><div id="blood-flow" class="flow-path"></div><p id="flow-description">Select a step to trace its connections and pressure relationships.</p></div><a class="next-card" href="#physiology"><span class="eyebrow">UNDERSTAND THE FUNCTION</span><h3>What changes when<br>afterload rises?</h3><p>Turn the dial. Watch the loop.</p><span class="round-arrow">↗</span></a></div>
+      </section>
+      <section id="view-physiology" class="view" hidden aria-labelledby="phys-title"></section>
+      <section id="view-ecg" class="view" hidden aria-labelledby="ecg-title"></section>
+      <section id="view-cases" class="view" hidden aria-labelledby="cases-title"></section>
+      <section id="view-curriculum" class="view" hidden aria-labelledby="curriculum-title"></section>
+      <section id="view-recall" class="view" hidden aria-labelledby="recall-title"></section>
+      <section id="view-references" class="view" hidden aria-labelledby="references-title"></section>
+      <footer class="page-footer"><span>mediX <i>·</i> Learn the mechanism. Understand the patient.</span><span>Educational simulations · Not a clinical decision tool</span></footer>
+    </main>
+  </div>
+  <div id="toast" role="status" class="toast" hidden></div>
+  <noscript><div class="noscript">Enable JavaScript to use the 3D atlas, lessons and simulations. <a href="https://www.ncbi.nlm.nih.gov/books/NBK482452/">Read the anatomy reference</a>.</div></noscript>
+  <script type="module" src="assets/heart/app.mjs"></script>
+</body>
+</html>
