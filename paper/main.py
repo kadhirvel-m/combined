@@ -18612,7 +18612,8 @@ def resolve_or_create_batch(payload: BatchResolveIn):
 
 @academics_router.post("/signup")
 def signup(user: UserAuthWithTurnstile, request: Request):
-    if not _is_agent_request(request):
+    # Local development (backend reached as localhost) skips Cloudflare Turnstile.
+    if not _is_agent_request(request) and not _is_local_host(request):
         verify_turnstile_token(user.turnstile_token, request=request, expected_action="signup")
     else:
         _security_emit("auth.agent_bypass", request=request, route="/signup")
@@ -18621,7 +18622,8 @@ def signup(user: UserAuthWithTurnstile, request: Request):
 
 @academics_router.post("/login")
 def login(user: UserAuthWithTurnstile, request: Request):
-    if not _is_agent_request(request):
+    # Local development (backend reached as localhost) skips Cloudflare Turnstile.
+    if not _is_agent_request(request) and not _is_local_host(request):
         verify_turnstile_token(user.turnstile_token, request=request, expected_action="login")
     else:
         _security_emit("auth.agent_bypass", request=request, route="/login")

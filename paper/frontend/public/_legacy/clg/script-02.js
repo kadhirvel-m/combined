@@ -1,0 +1,840 @@
+// Extracted from ui/clg.html (inline <script> #2).
+        const $ = (sel, scope = document) => scope.querySelector(sel);
+
+        const state = { name: '', degrees: [] };
+        const COMMON_DEGREES = ['B.Tech', 'M.Tech', 'B.Sc', 'MBA'];
+        const COMMON_DEPARTMENTS = ['CSE', 'IT', 'ECE', 'EEE', 'MECH', 'CIVIL', 'AI&DS', 'AIML', 'CHEM', 'BIO', 'MBA', 'MCA'];
+        let degreeSeq = 0;
+        let deptSeq = 0;
+
+        function makeDegreeId() {
+            degreeSeq += 1;
+            return `deg-${Date.now()}-${degreeSeq}`;
+        }
+
+        function makeDeptId() {
+            deptSeq += 1;
+            return `dept-${Date.now()}-${deptSeq}`;
+        }
+
+        function escapeHtml(value) {
+            if (value === null || value === undefined) {
+                return '';
+            }
+            return String(value).replace(/[&<>"']/g, (ch) => {
+                const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+                return map[ch] || ch;
+            });
+        }
+
+        function findDegree(id) {
+            return state.degrees.find((degree) => degree.id === id);
+        }
+
+        function findDepartment(degree, deptId) {
+            if (!degree) {
+                return undefined;
+            }
+            return degree.departments.find((department) => department.id === deptId);
+        }
+
+        const themeToggle = $('#themeToggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                try {
+                    if (window.Theme && typeof window.Theme.toggle === 'function') {
+                        window.Theme.toggle();
+                    } else {
+                        document.documentElement.classList.toggle('dark');
+                    }
+                } catch (err) {
+                    console.error(err);
+                }
+            });
+        }
+
+        const collegeNameInput = $('#collegeName');
+        const collegeNameErr = $('#collegeNameErr');
+        const degreeNameInput = $('#degreeName');
+        const degreeLevelInput = $('#degreeLevel');
+        const degreeDurationInput = $('#degreeDuration');
+        const degreeNameErr = $('#degreeNameErr');
+        const degreeErr = $('#degreeErr');
+        const formMsg = $('#formMsg');
+        const degreesContainer = $('#degreesContainer');
+        const collegeLogoInput = $('#collegeLogo');
+        const collegeLogoPreview = $('#collegeLogoPreview');
+        let pendingLogoFile = null;
+
+        if (collegeLogoInput) {
+            collegeLogoInput.addEventListener('change', (e) => {
+                const f = e.target.files && e.target.files[0];
+                pendingLogoFile = f || null;
+                if (f) {
+                    const url = URL.createObjectURL(f);
+                    collegeLogoPreview.src = url;
+                    collegeLogoPreview.classList.remove('hidden');
+                } else {
+                    collegeLogoPreview.classList.add('hidden');
+                }
+            });
+        }
+
+        if (collegeNameInput) {
+            collegeNameInput.addEventListener('input', (event) => {
+                state.name = event.target.value;
+            });
+        }
+
+        if (degreeNameInput) {
+            degreeNameInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    addDegreeFromForm();
+                }
+            });
+            degreeNameInput.addEventListener('input', hideDegreeNameError);
+        }
+
+        const addDegreeBtn = $('#addDegreeBtn');
+        if (addDegreeBtn) {
+            addDegreeBtn.addEventListener('click', addDegreeFromForm);
+        }
+
+        const addCommonDegreesBtn = $('#addCommonDegrees');
+        if (addCommonDegreesBtn) {
+            addCommonDegreesBtn.addEventListener('click', addCommonDegrees);
+        }
+
+        if (degreesContainer) {
+            degreesContainer.addEventListener('click', handleDegreeClicks);
+            degreesContainer.addEventListener('keydown', handleDegreeKeyDown);
+        }
+
+        const KEY = 'paperx.college.draft';
+
+        const saveBtn = $('#saveBtn');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', () => {
+                saveDraft();
+                toast('Draft saved');
+            });
+        }
+
+        const loadBtn = $('#loadBtn');
+        if (loadBtn) {
+            loadBtn.addEventListener('click', () => {
+                if (loadDraft()) {
+                    toast('Draft loaded');
+                } else {
+                    toast('No draft found');
+                }
+            });
+        }
+
+        const resetBtn = $('#resetBtn');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', resetForm);
+        }
+
+        const collegeForm = $('#collegeForm');
+        if (collegeForm) {
+            collegeForm.addEventListener('submit', handleSubmit);
+        }
+
+        function hideDegreeNameError() {
+            if (degreeNameErr) {
+                degreeNameErr.classList.add('hidden');
+            }
+        }
+
+        function showDegreeNameError(message) {
+            if (degreeNameErr) {
+                degreeNameErr.textContent = message;
+                degreeNameErr.classList.remove('hidden');
+            }
+        }
+
+        function addDegreeFromForm() {
+            if (!degreeNameInput) {
+                return;
+            }
+            const name = degreeNameInput.value.trim();
+            const level = degreeLevelInput ? degreeLevelInput.value.trim() : '';
+            const durationRaw = degreeDurationInput ? degreeDurationInput.value.trim() : '';
+            if (!name) {
+                showDegreeNameError('Enter a degree name.');
+                return;
+            }
+            if (state.degrees.some((degree) => degree.name.toLowerCase() === name.toLowerCase())) {
+                showDegreeNameError('Degree already exists.');
+                return;
+            }
+            let durationYears = null;
+            if (durationRaw) {
+                const parsed = Number(durationRaw);
+                if (!Number.isInteger(parsed) || parsed < 1 || parsed > 10) {
+                    showDegreeNameError('Duration must be a whole number between 1 and 10.');
+                    return;
+                }
+                durationYears = parsed;
+            }
+            state.degrees.push({
+                id: makeDegreeId(),
+                name,
+                level,
+                duration_years: durationYears,
+                departments: [],
+            });
+            degreeNameInput.value = '';
+            if (degreeLevelInput) {
+                degreeLevelInput.value = '';
+            }
+            if (degreeDurationInput) {
+                degreeDurationInput.value = '';
+            }
+            hideDegreeNameError();
+            render();
+        }
+
+        function addCommonDegrees() {
+            let added = 0;
+            COMMON_DEGREES.forEach((label) => {
+                if (!state.degrees.some((degree) => degree.name.toLowerCase() === label.toLowerCase())) {
+                    state.degrees.push({
+                        id: makeDegreeId(),
+                        name: label,
+                        level: '',
+                        duration_years: null,
+                        departments: [],
+                    });
+                    added += 1;
+                }
+            });
+            hideDegreeNameError();
+            if (added) {
+                render();
+                toast(`Added ${added} degree${added === 1 ? '' : 's'}`);
+            } else {
+                toast('All common degrees are already listed');
+            }
+        }
+
+        function handleDegreeClicks(event) {
+            const target = event.target.closest('[data-action]');
+            if (!target) {
+                return;
+            }
+            const action = target.dataset.action;
+            const degreeId = target.dataset.degreeId;
+            const deptId = target.dataset.deptId;
+            const index = target.dataset.index;
+            if (!action) {
+                return;
+            }
+            if (action === 'remove-degree') {
+                removeDegree(degreeId);
+            } else if (action === 'add-dept') {
+                addDepartment(degreeId);
+            } else if (action === 'quick-dept') {
+                addCommonDepartments(degreeId);
+            } else if (action === 'remove-dept') {
+                removeDepartment(degreeId, deptId);
+            } else if (action === 'add-batch') {
+                addBatchRange(degreeId, deptId);
+            } else if (action === 'remove-batch') {
+                removeBatch(degreeId, deptId, Number(index));
+            }
+        }
+
+        function handleDegreeKeyDown(event) {
+            if (event.key !== 'Enter') {
+                return;
+            }
+            const target = event.target;
+            if (target.matches('[data-role="dept-input"]')) {
+                event.preventDefault();
+                addDepartment(target.dataset.degreeId, target.value);
+            } else if (target.matches('[data-role="batch-to"]')) {
+                event.preventDefault();
+                addBatchRange(target.dataset.degreeId, target.dataset.deptId);
+            }
+        }
+
+        function addDepartment(degreeId, providedName) {
+            const degree = findDegree(degreeId);
+            if (!degree) {
+                return;
+            }
+            const input = document.getElementById('dept-input-' + degreeId);
+            const errEl = document.getElementById('dept-err-' + degreeId);
+            const source = providedName !== undefined ? providedName : (input ? input.value : '');
+            const name = (source || '').trim();
+            if (!name) {
+                if (errEl) {
+                    errEl.textContent = 'Enter a department name.';
+                    errEl.classList.remove('hidden');
+                }
+                return;
+            }
+            const normalized = name.toUpperCase();
+            if (degree.departments.some((department) => department.name.toUpperCase() === normalized)) {
+                if (errEl) {
+                    errEl.textContent = 'Department already added.';
+                    errEl.classList.remove('hidden');
+                }
+                return;
+            }
+            degree.departments.push({
+                id: makeDeptId(),
+                name: normalized,
+                batches: [],
+            });
+            if (input) {
+                input.value = '';
+            }
+            if (errEl) {
+                errEl.classList.add('hidden');
+            }
+            render();
+        }
+
+        function addCommonDepartments(degreeId) {
+            const degree = findDegree(degreeId);
+            if (!degree) {
+                return;
+            }
+            const errEl = document.getElementById('dept-err-' + degreeId);
+            let added = 0;
+            COMMON_DEPARTMENTS.forEach((name) => {
+                if (!degree.departments.some((department) => department.name === name)) {
+                    degree.departments.push({
+                        id: makeDeptId(),
+                        name,
+                        batches: [],
+                    });
+                    added += 1;
+                }
+            });
+            if (errEl) {
+                errEl.classList.add('hidden');
+            }
+            if (added) {
+                render();
+                toast(`Added ${added} department${added === 1 ? '' : 's'}`);
+            } else {
+                toast('All common departments already exist');
+            }
+        }
+
+        function removeDepartment(degreeId, deptId) {
+            const degree = findDegree(degreeId);
+            if (!degree) {
+                return;
+            }
+            degree.departments = degree.departments.filter((department) => department.id !== deptId);
+            render();
+        }
+
+        function removeDegree(degreeId) {
+            state.degrees = state.degrees.filter((degree) => degree.id !== degreeId);
+            render();
+        }
+
+        function addBatchRange(degreeId, deptId) {
+            const degree = findDegree(degreeId);
+            if (!degree) {
+                return;
+            }
+            const department = findDepartment(degree, deptId);
+            if (!department) {
+                return;
+            }
+            const fromInput = document.getElementById('batch-from-' + degreeId + '-' + deptId);
+            const toInput = document.getElementById('batch-to-' + degreeId + '-' + deptId);
+            const errEl = document.getElementById('batch-err-' + degreeId + '-' + deptId);
+            const fromVal = fromInput ? Number(fromInput.value) : NaN;
+            const toVal = toInput ? Number(toInput.value) : NaN;
+            if (!Number.isInteger(fromVal) || !Number.isInteger(toVal) || fromVal < 1950 || toVal > 2100 || fromVal > toVal) {
+                if (errEl) {
+                    errEl.textContent = 'Enter a valid year range between 1950 and 2100.';
+                    errEl.classList.remove('hidden');
+                }
+                return;
+            }
+            if (department.batches.some((batch) => batch.from === fromVal && batch.to === toVal)) {
+                if (errEl) {
+                    errEl.textContent = 'This batch range already exists.';
+                    errEl.classList.remove('hidden');
+                }
+                return;
+            }
+            department.batches.push({ from: fromVal, to: toVal });
+            if (fromInput) {
+                fromInput.value = '';
+            }
+            if (toInput) {
+                toInput.value = '';
+            }
+            if (errEl) {
+                errEl.classList.add('hidden');
+            }
+            render();
+        }
+
+        function removeBatch(degreeId, deptId, index) {
+            const degree = findDegree(degreeId);
+            if (!degree) {
+                return;
+            }
+            const department = findDepartment(degree, deptId);
+            if (!department) {
+                return;
+            }
+            if (!Number.isInteger(index) || index < 0 || index >= department.batches.length) {
+                return;
+            }
+            department.batches.splice(index, 1);
+            render();
+        }
+
+        function validateHierarchy() {
+            if (!state.degrees.length) {
+                return 'Add at least one degree.';
+            }
+            for (const degree of state.degrees) {
+                if (!degree.departments.length) {
+                    return `Add at least one department to ${degree.name}.`;
+                }
+                for (const department of degree.departments) {
+                    if (!department.batches.length) {
+                        return `Add at least one batch range for ${department.name} in ${degree.name}.`;
+                    }
+                }
+            }
+            return '';
+        }
+
+        function saveDraft() {
+            if (collegeNameInput) {
+                state.name = collegeNameInput.value.trim();
+            }
+            localStorage.setItem(KEY, JSON.stringify(state));
+        }
+
+        function loadDraft() {
+            try {
+                const raw = localStorage.getItem(KEY);
+                if (!raw) {
+                    return false;
+                }
+                const parsed = JSON.parse(raw);
+                const safe = normalizeLoadedState(parsed);
+                state.name = safe.name;
+                state.degrees = safe.degrees;
+                render();
+                return true;
+            } catch (err) {
+                console.error(err);
+                return false;
+            }
+        }
+
+        function normalizeLoadedState(raw) {
+            degreeSeq = 0;
+            deptSeq = 0;
+            const safe = { name: '', degrees: [] };
+            if (!raw || typeof raw !== 'object') {
+                return safe;
+            }
+            if (typeof raw.name === 'string') {
+                safe.name = raw.name;
+            }
+            if (Array.isArray(raw.degrees)) {
+                raw.degrees.forEach((deg) => {
+                    if (!deg || typeof deg !== 'object') {
+                        return;
+                    }
+                    const name = typeof deg.name === 'string' ? deg.name.trim() : '';
+                    if (!name) {
+                        return;
+                    }
+                    const degree = {
+                        id: makeDegreeId(),
+                        name,
+                        level: typeof deg.level === 'string' ? deg.level.trim() : '',
+                        duration_years: Number.isInteger(deg.duration_years) ? deg.duration_years : null,
+                        departments: [],
+                    };
+                    if (Array.isArray(deg.departments)) {
+                        deg.departments.forEach((dep) => {
+                            if (!dep || typeof dep !== 'object') {
+                                return;
+                            }
+                            const depName = typeof dep.name === 'string' ? dep.name.trim() : '';
+                            if (!depName) {
+                                return;
+                            }
+                            const department = {
+                                id: makeDeptId(),
+                                name: depName.toUpperCase(),
+                                batches: [],
+                            };
+                            if (Array.isArray(dep.batches)) {
+                                dep.batches.forEach((batch) => {
+                                    const from = Number(batch?.from);
+                                    const to = Number(batch?.to);
+                                    if (
+                                        Number.isInteger(from) &&
+                                        Number.isInteger(to) &&
+                                        from >= 1950 &&
+                                        to <= 2100 &&
+                                        from <= to
+                                    ) {
+                                        department.batches.push({ from, to });
+                                    }
+                                });
+                            }
+                            degree.departments.push(department);
+                        });
+                    }
+                    safe.degrees.push(degree);
+                });
+            }
+            if (!safe.degrees.length && Array.isArray(raw.departments)) {
+                const fallback = {
+                    id: makeDegreeId(),
+                    name: 'B.Tech',
+                    level: '',
+                    duration_years: null,
+                    departments: [],
+                };
+                raw.departments.forEach((depName) => {
+                    if (typeof depName !== 'string') {
+                        return;
+                    }
+                    const trimmed = depName.trim();
+                    if (!trimmed) {
+                        return;
+                    }
+                    const normalized = trimmed.toUpperCase();
+                    if (fallback.departments.some((dep) => dep.name === normalized)) {
+                        return;
+                    }
+                    fallback.departments.push({
+                        id: makeDeptId(),
+                        name: normalized,
+                        batches: [],
+                    });
+                });
+                const ranges = Array.isArray(raw.batches) ? raw.batches : [];
+                const parsedRanges = ranges
+                    .map((range) => {
+                        if (!range) {
+                            return null;
+                        }
+                        const match = String(range).match(/(\d{4}).*(\d{4})/);
+                        if (!match) {
+                            return null;
+                        }
+                        const from = Number(match[1]);
+                        const to = Number(match[2]);
+                        if (!Number.isInteger(from) || !Number.isInteger(to) || from > to || from < 1950 || to > 2100) {
+                            return null;
+                        }
+                        return { from, to };
+                    })
+                    .filter(Boolean);
+                if (parsedRanges.length && fallback.departments.length) {
+                    fallback.departments.forEach((dept) => {
+                        dept.batches = parsedRanges.map((range) => ({ from: range.from, to: range.to }));
+                    });
+                }
+                if (fallback.departments.length) {
+                    safe.degrees.push(fallback);
+                }
+            }
+            return safe;
+        }
+
+        function resetForm() {
+            state.name = '';
+            state.degrees = [];
+            degreeSeq = 0;
+            deptSeq = 0;
+            if (collegeNameInput) {
+                collegeNameInput.value = '';
+            }
+            if (degreeNameInput) {
+                degreeNameInput.value = '';
+            }
+            if (degreeLevelInput) {
+                degreeLevelInput.value = '';
+            }
+            if (degreeDurationInput) {
+                degreeDurationInput.value = '';
+            }
+            hideDegreeNameError();
+            if (collegeNameErr) {
+                collegeNameErr.classList.add('hidden');
+            }
+            if (degreeErr) {
+                degreeErr.classList.add('hidden');
+            }
+            if (formMsg) {
+                formMsg.textContent = '';
+            }
+            render();
+        }
+
+        function handleSubmit(event) {
+            event.preventDefault();
+            if (!collegeNameInput) {
+                return;
+            }
+            const name = collegeNameInput.value.trim();
+            if (!name) {
+                if (collegeNameErr) {
+                    collegeNameErr.classList.remove('hidden');
+                }
+                return;
+            }
+            if (collegeNameErr) {
+                collegeNameErr.classList.add('hidden');
+            }
+            state.name = name;
+            const hierarchyMessage = validateHierarchy();
+            if (hierarchyMessage) {
+                if (degreeErr) {
+                    degreeErr.textContent = hierarchyMessage;
+                    degreeErr.classList.remove('hidden');
+                }
+                return;
+            }
+            if (degreeErr) {
+                degreeErr.classList.add('hidden');
+            }
+            if (formMsg) {
+                formMsg.textContent = 'Saving...';
+            }
+            const payload = {
+                college_name: state.name,
+                degrees: state.degrees.map((degree) => ({
+                    name: degree.name,
+                    level: degree.level || null,
+                    duration_years: Number.isInteger(degree.duration_years) ? degree.duration_years : null,
+                    departments: degree.departments.map((department) => ({
+                        name: department.name,
+                        batches: department.batches.map((batch) => ({ from: batch.from, to: batch.to })),
+                    })),
+                })),
+            };
+            fetch('http://0.0.0.0:10000/api/colleges', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            })
+                .then(async (response) => {
+                    if (!response.ok) {
+                        let message = 'API error';
+                        try {
+                            const data = await response.json();
+                            message = data?.detail || data?.error || message;
+                        } catch (err) {
+                            console.error(err);
+                        }
+                        throw new Error(message);
+                    }
+                    return response.json();
+                })
+                .then(async (data) => {
+                    console.log('Saved:', data);
+                    if (pendingLogoFile && data?.id) {
+                        try {
+                            const fd = new FormData();
+                            fd.append('file', pendingLogoFile);
+                            const up = await fetch(`http://0.0.0.0:10000/api/colleges/${data.id}/logo`, { method: 'POST', body: fd });
+                            if (!up.ok) {
+                                let m = 'Logo upload failed';
+                                try { const jd = await up.json(); m = jd.detail || m; } catch (e) { }
+                                toast(m);
+                            } else {
+                                toast('College & logo saved');
+                            }
+                        } catch (e) { console.error(e); toast('Logo upload error'); }
+                    } else {
+                        toast('College saved');
+                    }
+                    if (formMsg) { formMsg.textContent = 'College saved.'; }
+                    loadExistingColleges();
+                })
+                .catch((err) => {
+                    console.error(err);
+                    if (formMsg) {
+                        formMsg.textContent = `Save failed: ${err.message}`;
+                    }
+                    toast(`Save failed: ${err.message}`);
+                });
+        }
+
+        // Existing colleges section
+        const existingSection = document.createElement('section');
+        existingSection.className = 'glass rounded-2xl p-6 ring-1 ring-slate-200 dark:ring-slate-800 shadow-soft mt-10';
+        existingSection.innerHTML = `
+        <h2 class="text-lg font-semibold mb-4">Existing Colleges</h2>
+        <div id="collegesList" class="grid gap-4"></div>
+    `;
+        document.querySelector('main').appendChild(existingSection);
+
+        async function loadExistingColleges() {
+            try {
+                const r = await fetch('http://0.0.0.0:10000/api/colleges');
+                if (!r.ok) return;
+                const items = await r.json();
+                const list = document.getElementById('collegesList');
+                if (!list) return;
+                if (!items.length) { list.innerHTML = '<p class="text-sm text-slate-500">No colleges yet.</p>'; return; }
+                list.innerHTML = items.map(c => `
+                <div class="flex items-center gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50">
+                    <img src="${c.logo_url || 'https://via.placeholder.com/64?text=CLG'}" class="w-14 h-14 object-cover rounded-lg ring-1 ring-slate-200 dark:ring-slate-700 bg-white" alt="logo" />
+                    <div class="flex-1 min-w-0">
+                        <div class="font-medium truncate">${escapeHtml(c.name)}</div>
+                        <div class="text-[10px] text-slate-500 truncate">${c.id}</div>
+                    </div>
+                    <label class="text-xs cursor-pointer inline-flex items-center gap-1 rounded-lg px-3 py-1.5 ring-1 ring-slate-300 dark:ring-slate-700 hover:bg-slate-100/60 dark:hover:bg-slate-800/60">
+                        <input type="file" data-change-logo="${c.id}" class="hidden" accept="image/png,image/jpeg,image/webp,image/svg+xml" />
+                        <span class="material-symbols-rounded text-[18px]">image</span> Change
+                    </label>
+                </div>
+            `).join('');
+                list.querySelectorAll('input[data-change-logo]').forEach(inp => {
+                    inp.addEventListener('change', async ev => {
+                        const cid = ev.target.getAttribute('data-change-logo');
+                        const f = ev.target.files && ev.target.files[0];
+                        if (!cid || !f) return;
+                        const fd = new FormData();
+                        fd.append('file', f);
+                        try {
+                            const up = await fetch(`http://0.0.0.0:10000/api/colleges/${cid}/logo`, { method: 'POST', body: fd });
+                            if (!up.ok) {
+                                let m = 'Upload failed';
+                                try { const jd = await up.json(); m = jd.detail || m; } catch (e) { }
+                                toast(m);
+                            } else { toast('Logo updated'); loadExistingColleges(); }
+                        } catch (e) { console.error(e); toast('Network error'); }
+                    });
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        loadExistingColleges();
+
+        function render() {
+            if (collegeNameInput && collegeNameInput.value !== state.name) {
+                collegeNameInput.value = state.name;
+            }
+            if (!degreesContainer) {
+                return;
+            }
+            degreesContainer.innerHTML = state.degrees.length
+                ? state.degrees.map((degree) => renderDegreeCard(degree)).join('')
+                : '<p class="text-sm text-slate-500">No degrees added yet. Use the form above to add one.</p>';
+        }
+
+        function renderDegreeCard(degree) {
+            const badges = [];
+            if (degree.level) {
+                badges.push(`<span class="chip text-xs uppercase">${escapeHtml(degree.level)}</span>`);
+            }
+            if (Number.isInteger(degree.duration_years)) {
+                badges.push(`<span class="chip text-xs">${degree.duration_years} yrs</span>`);
+            }
+            const deptList = degree.departments.length
+                ? degree.departments.map((department) => renderDepartmentCard(degree, department)).join('')
+                : '<p class="text-sm text-slate-500">No departments yet. Add one using the form above.</p>';
+            return `
+            <div class="rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-5" data-degree-id="${degree.id}">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-lg font-semibold">${escapeHtml(degree.name)}</h3>
+                        ${badges.length ? `<div class="mt-1 flex flex-wrap gap-2">${badges.join('')}</div>` : ''}
+                    </div>
+                    <button type="button" class="text-sm text-rose-600 hover:text-rose-700" data-action="remove-degree" data-degree-id="${degree.id}">Remove degree</button>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2" for="dept-input-${degree.id}">Add department *</label>
+                    <div class="flex flex-wrap gap-3">
+                        <input id="dept-input-${degree.id}" data-role="dept-input" data-degree-id="${degree.id}" type="text" placeholder="e.g., AIML"
+                            class="flex-1 min-w-[10rem] max-w-sm rounded-xl border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/70 focus:border-brand-500 focus:ring-brand-500" />
+                        <div class="flex gap-2">
+                            <button type="button" class="rounded-xl px-4 py-2 bg-brand-600 text-white hover:bg-brand-700" data-action="add-dept" data-degree-id="${degree.id}">Add department</button>
+                            <button type="button" class="rounded-xl px-4 py-2 ring-1 ring-slate-300 dark:ring-slate-700" data-action="quick-dept" data-degree-id="${degree.id}">Add common</button>
+                        </div>
+                    </div>
+                    <p id="dept-err-${degree.id}" class="mt-1 text-xs text-rose-600 hidden">Enter a unique department name.</p>
+                </div>
+                <div class="space-y-4" id="dept-list-${degree.id}">
+                    ${deptList}
+                </div>
+            </div>
+        `;
+        }
+
+        function renderDepartmentCard(degree, department) {
+            const batchChips = department.batches
+                .map((batch, index) => `<span class="chip">${batch.from}-${batch.to}<span class="x" data-action="remove-batch" data-degree-id="${degree.id}" data-dept-id="${department.id}" data-index="${index}">&times;</span></span>`)
+                .join('');
+            const batchesHtml = batchChips || '<span class="text-xs text-slate-500">No batches yet. Add a range below.</span>';
+            const fromId = 'batch-from-' + degree.id + '-' + department.id;
+            const toId = 'batch-to-' + degree.id + '-' + department.id;
+            const errId = 'batch-err-' + degree.id + '-' + department.id;
+            return `
+            <div class="rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3" data-dept-id="${department.id}">
+                <div class="flex items-center justify-between gap-2">
+                    <h4 class="font-medium">${escapeHtml(department.name)}</h4>
+                    <button type="button" class="text-xs text-rose-500 hover:text-rose-600" data-action="remove-dept" data-degree-id="${degree.id}" data-dept-id="${department.id}">Remove</button>
+                </div>
+                <div class="flex flex-wrap gap-2" id="batch-chips-${degree.id}-${department.id}">
+                    ${batchesHtml}
+                </div>
+                <div class="grid gap-3 sm:grid-cols-6">
+                    <div class="sm:col-span-2">
+                        <input type="number" min="1950" max="2100" placeholder="From"
+                            id="${fromId}"
+                            data-role="batch-from"
+                            data-degree-id="${degree.id}"
+                            data-dept-id="${department.id}"
+                            class="w-full rounded-xl border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/70 focus:border-brand-500 focus:ring-brand-500" />
+                    </div>
+                    <div class="sm:col-span-2">
+                        <input type="number" min="1950" max="2100" placeholder="To"
+                            id="${toId}"
+                            data-role="batch-to"
+                            data-degree-id="${degree.id}"
+                            data-dept-id="${department.id}"
+                            class="w-full rounded-xl border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/70 focus:border-brand-500 focus:ring-brand-500" />
+                    </div>
+                    <div class="sm:col-span-2 flex">
+                        <button type="button"
+                            class="w-full rounded-xl px-4 py-2 bg-brand-600 text-white hover:bg-brand-700"
+                            data-action="add-batch"
+                            data-degree-id="${degree.id}"
+                            data-dept-id="${department.id}">Add batch</button>
+                    </div>
+                </div>
+                <p id="${errId}" class="text-xs text-rose-600 hidden">Enter a valid batch range.</p>
+            </div>
+        `;
+        }
+
+        function toast(message) {
+            const el = document.createElement('div');
+            el.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-4 py-2 rounded-xl shadow-soft';
+            el.textContent = message;
+            document.body.appendChild(el);
+            setTimeout(() => {
+                el.remove();
+            }, 1500);
+        }
+
+        render();

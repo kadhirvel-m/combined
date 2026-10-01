@@ -1,0 +1,764 @@
+// Extracted from ui/branch.html (inline <script> #1).
+    (() => {
+      const stored = localStorage.getItem('px_theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const dark = stored ? stored === 'dark' : prefersDark;
+      if (dark) document.documentElement.classList.add('dark');
+    })();
+
+    const themeToggle = document.getElementById('themeToggle');
+    themeToggle.addEventListener('click', () => {
+      const root = document.documentElement;
+      const dark = root.classList.toggle('dark');
+      localStorage.setItem('px_theme', dark ? 'dark' : 'light');
+      themeToggle.querySelector('.material-symbols-rounded').textContent = dark ? 'light_mode' : 'dark_mode';
+    });
+
+    const ui = {
+      statStudents: document.getElementById('statStudents'),
+      statColleges: document.getElementById('statColleges'),
+      statDegrees: document.getElementById('statDegrees'),
+      statDepartments: document.getElementById('statDepartments'),
+      statBatches: document.getElementById('statBatches'),
+      statusBadge: document.getElementById('statusBadge'),
+      errorText: document.getElementById('errorText'),
+      hierarchyRoot: document.getElementById('hierarchyRoot'),
+      emptyText: document.getElementById('emptyText'),
+      searchInput: document.getElementById('searchInput'),
+      refreshBtn: document.getElementById('refreshBtn')
+    };
+
+    function setStatus(text, icon = 'info') {
+      ui.statusBadge.innerHTML = `<span class="material-symbols-rounded text-[14px]">${icon}</span>${text}`;
+    }
+
+    function showError(message) {
+      ui.errorText.textContent = message;
+      ui.errorText.classList.remove('hidden');
+    }
+
+    function clearError() {
+      ui.errorText.textContent = '';
+      ui.errorText.classList.add('hidden');
+    }
+
+    function normalizeText(v, fallback) {
+      const s = String(v == null ? '' : v).trim();
+      return s || fallback;
+    }
+
+    function firstNonEmpty(...values) {
+      for (const v of values) {
+        if (v == null) continue;
+        const s = String(v).trim();
+        if (s) return s;
+      }
+      return '';
+    }
+
+    function toBatchRange(record) {
+      const bestEdu = pickBestEducationEntry(record?.education_entries);
+      const from = firstNonEmpty(record?.batch_from, record?.batch?.from, bestEdu?.batch?.from, bestEdu?.batch_from);
+      const to = firstNonEmpty(record?.batch_to, record?.batch?.to, bestEdu?.batch?.to, bestEdu?.batch_to);
+      const directRange = firstNonEmpty(record?.batch_range, record?.batchRange, record?.batch, bestEdu?.batch_range);
+      if (directRange) return String(directRange);
+      if (from && to) return `${from}-${to}`;
+      return '';
+    }
+
+    function dedupeUsersByIdentity(users) {
+      const seen = new Set();
+      const out = [];
+      for (const u of users || []) {
+        const key = firstNonEmpty(u?.auth_user_id, u?.user_id, u?.id, u?.email).toLowerCase();
+        if (!key) {
+          out.push(u);
+          continue;
+        }
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(u);
+      }
+      return out;
+    }
+
+    function pickBestEducationEntry(entries) {
+      if (!Array.isArray(entries) || !entries.length) return null;
+      let best = null;
+      let bestScore = -1;
+
+      for (const ed of entries) {
+        if (!ed || typeof ed !== 'object') continue;
+        let score = 0;
+        if (firstNonEmpty(ed.school, ed.college, ed.college_name)) score += 2;
+        if (firstNonEmpty(ed.degree, ed.degree_name, ed.degree_id)) score += 2;
+        if (firstNonEmpty(ed.department, ed.department_name, ed.department_id)) score += 2;
+        if (firstNonEmpty(ed.batch_range, ed.batch_from, ed.batch_to, ed.batch?.from, ed.batch?.to)) score += 2;
+        if (firstNonEmpty(ed.section, ed.sec)) score += 1;
+        if (firstNonEmpty(ed.current_semester, ed.semester, ed.sem)) score += 1;
+        if (firstNonEmpty(ed.order_index) !== '') score += 1;
+        if (firstNonEmpty(ed.created_at) !== '') score += 1;
+
+        if (score > bestScore) {
+          best = ed;
+          bestScore = score;
+        }
+      }
+
+      return best;
+    }
+
+    function isStudentRecord(user) {
+      const role = String(user?.role || '').trim().toLowerCase();
+      const nonStudentRoles = new Set(['admin', 'teacher', 'employee', 'moderator', 'hod']);
+      if (nonStudentRoles.has(role)) return false;
+
+      // Unknown/empty role: treat as student if academic fields exist.
+      const bestEdu = pickBestEducationEntry(user?.education_entries);
+      const hasAcademicData = Boolean(firstNonEmpty(
+        user?.college,
+        user?.college_name,
+        user?.department,
+        user?.department_name,
+        user?.degree,
+        user?.degree_name,
+        user?.batch_range,
+        user?.batch_from,
+        user?.batch_to,
+        user?.section,
+        user?.semester,
+        bestEdu?.school,
+        bestEdu?.degree,
+        bestEdu?.department,
+        bestEdu?.batch_range,
+        bestEdu?.section,
+        bestEdu?.current_semester
+      ));
+
+      return role === 'student' || role === '' || role === 'user' || role === 'authenticated' || hasAcademicData;
+    }
+
+    function normalizeUserRecord(user) {
+      const firstEdu = pickBestEducationEntry(user?.education_entries);
+
+      const college = firstNonEmpty(
+        user?.college?.name,
+        user?.college,
+        user?.college_name,
+        firstEdu?.school,
+        firstEdu?.college,
+        firstEdu?.college_name
+      );
+
+      const degree = firstNonEmpty(
+        user?.degree?.name,
+        user?.degree,
+        user?.degree_name,
+        firstEdu?.degree,
+        firstEdu?.degree_name
+      );
+
+      const department = firstNonEmpty(
+        user?.department?.name,
+        user?.department,
+        user?.department_name,
+        user?.dept,
+        firstEdu?.department,
+        firstEdu?.department_name
+      );
+
+      const section = firstNonEmpty(
+        user?.section,
+        user?.section_name,
+        user?.sec,
+        firstEdu?.section,
+        firstEdu?.sec
+      ).toUpperCase();
+
+      const role = String(user?.role || 'student').trim().toLowerCase() || 'student';
+
+      return {
+        ...user,
+        college: normalizeText(college, 'Unknown College'),
+        degree: normalizeText(degree, 'Unknown Degree'),
+        department: normalizeText(department, 'Unknown Department'),
+        batch_range: normalizeText(toBatchRange(user), 'Unknown Batch'),
+        section: normalizeText(section, 'Unknown Section'),
+        role
+      };
+    }
+
+    function getToken() {
+      const token =
+        localStorage.getItem('px_token') ||
+        localStorage.getItem('access_token') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem('teacherToken') ||
+        '';
+      return token && token !== '__COOKIE_AUTH__' ? token : '';
+    }
+
+    function authHeaders() {
+      const t = getToken();
+      return t ? { Authorization: `Bearer ${t}` } : {};
+    }
+
+    async function requireAdminAccess(apiBase) {
+      const res = await fetch(apiBase + '/api/admin/self-check', {
+        method: 'GET',
+        headers: { ...authHeaders() },
+        credentials: 'include'
+      });
+      if (res.status === 401) throw new Error('Unauthorized. Please sign in as admin.');
+      if (res.status === 403) throw new Error('Forbidden. This page is only for admin users.');
+      if (!res.ok) {
+        const out = await res.json().catch(() => ({}));
+        throw new Error(out?.detail || `Admin validation failed (${res.status})`);
+      }
+      return await res.json().catch(() => ({}));
+    }
+
+    async function resolveApiBase() {
+      if (typeof window.API_BASE === 'string' && window.API_BASE.trim()) {
+        return window.API_BASE.replace(/\/$/, '');
+      }
+      return 'http://0.0.0.0:10000';
+    }
+
+    async function fetchAllUsers(apiBase) {
+      const pageSize = 2000;
+      let offset = 0;
+      const all = [];
+      const search = (ui.searchInput.value || '').trim();
+
+      while (true) {
+        const url = new URL(apiBase + '/api/admin/users');
+        url.searchParams.set('limit', String(pageSize));
+        url.searchParams.set('offset', String(offset));
+        if (search) url.searchParams.set('q', search);
+
+        const res = await fetch(url.toString(), {
+          method: 'GET',
+          headers: { ...authHeaders() },
+          credentials: 'include'
+        });
+
+        if (res.status === 401) throw new Error('Unauthorized. Please sign in as admin.');
+        if (res.status === 403) throw new Error('Forbidden. This page is only for admin users.');
+        if (!res.ok) {
+          const out = await res.json().catch(() => ({}));
+          throw new Error(out?.detail || `Failed to load users (${res.status})`);
+        }
+
+        const data = await res.json().catch(() => ({}));
+        const rows = Array.isArray(data?.users) ? data.users : [];
+        all.push(...rows);
+
+        if (!rows.length || rows.length < pageSize) break;
+        offset += rows.length;
+        if (offset > 100000) break;
+      }
+
+      return all;
+    }
+
+    function buildHierarchy(students) {
+      const tree = new Map();
+      const counters = {
+        students: students.length,
+        colleges: new Set(),
+        degrees: new Set(),
+        departments: new Set(),
+        batches: new Set()
+      };
+
+      for (const s of students) {
+        const college = s.college;
+        const degree = s.degree;
+        const department = s.department;
+        const batch = s.batch_range;
+        const section = s.section;
+
+        counters.colleges.add(college);
+        counters.degrees.add(`${college}|||${degree}`);
+        counters.departments.add(`${college}|||${degree}|||${department}`);
+        counters.batches.add(`${college}|||${degree}|||${department}|||${batch}`);
+
+        if (!tree.has(college)) tree.set(college, { count: 0, degrees: new Map() });
+        const cNode = tree.get(college);
+        cNode.count += 1;
+
+        if (!cNode.degrees.has(degree)) cNode.degrees.set(degree, { count: 0, departments: new Map() });
+        const dNode = cNode.degrees.get(degree);
+        dNode.count += 1;
+
+        if (!dNode.departments.has(department)) dNode.departments.set(department, { count: 0, batches: new Map() });
+        const depNode = dNode.departments.get(department);
+        depNode.count += 1;
+
+        if (!depNode.batches.has(batch)) depNode.batches.set(batch, { count: 0, sections: new Map() });
+        const bNode = depNode.batches.get(batch);
+        bNode.count += 1;
+
+        bNode.sections.set(section, (bNode.sections.get(section) || 0) + 1);
+      }
+
+      return {
+        tree,
+        stats: {
+          students: counters.students,
+          colleges: counters.colleges.size,
+          degrees: counters.degrees.size,
+          departments: counters.departments.size,
+          batches: counters.batches.size
+        }
+      };
+    }
+
+    function sortedMapEntries(mapObj, customSort = null) {
+      const entries = Array.from(mapObj.entries());
+      if (customSort) entries.sort(customSort);
+      else entries.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+      return entries;
+    }
+
+    function batchSorter(a, b) {
+      const ax = String(a[0]);
+      const bx = String(b[0]);
+      const am = ax.match(/(\d{4})\D+(\d{4})/);
+      const bm = bx.match(/(\d{4})\D+(\d{4})/);
+      if (am && bm) {
+        const af = Number(am[1]);
+        const bf = Number(bm[1]);
+        if (af !== bf) return af - bf;
+        const at = Number(am[2]);
+        const bt = Number(bm[2]);
+        if (at !== bt) return at - bt;
+      }
+      return ax.localeCompare(bx);
+    }
+
+    function mapTreeToHierarchy(tree) {
+      const out = [];
+      for (const [collegeName, collegeNode] of sortedMapEntries(tree)) {
+        const college = { name: collegeName, count: Number(collegeNode?.count || 0), degrees: [] };
+        for (const [degreeName, degreeNode] of sortedMapEntries(collegeNode.degrees)) {
+          const degree = { name: degreeName, count: Number(degreeNode?.count || 0), departments: [] };
+          for (const [deptName, deptNode] of sortedMapEntries(degreeNode.departments)) {
+            const department = { name: deptName, count: Number(deptNode?.count || 0), batches: [] };
+            for (const [batchName, batchNode] of sortedMapEntries(deptNode.batches, batchSorter)) {
+              const sections = Array.from(batchNode.sections.entries())
+                .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+                .map(([name, count]) => ({ name, count: Number(count || 0) }));
+              department.batches.push({
+                name: batchName,
+                count: Number(batchNode?.count || 0),
+                sections
+              });
+            }
+            degree.departments.push(department);
+          }
+          college.degrees.push(degree);
+        }
+        out.push(college);
+      }
+      return out;
+    }
+
+    function normalizeHierarchyPayload(hierarchy) {
+      return (Array.isArray(hierarchy) ? hierarchy : []).map(college => ({
+        id: college?.id ? String(college.id) : null,
+        name: normalizeText(college?.name, 'Unknown College'),
+        count: Number(college?.count || 0),
+        degrees: (Array.isArray(college?.degrees) ? college.degrees : []).map(degree => ({
+          name: normalizeText(degree?.name, 'Unknown Degree'),
+          count: Number(degree?.count || 0),
+          departments: (Array.isArray(degree?.departments) ? degree.departments : []).map(department => ({
+            name: normalizeText(department?.name, 'Unknown Department'),
+            count: Number(department?.count || 0),
+            batches: (Array.isArray(department?.batches) ? department.batches : []).map(batch => ({
+              name: normalizeText(batch?.name, 'Unknown Batch'),
+              count: Number(batch?.count || 0),
+              sections: (Array.isArray(batch?.sections) ? batch.sections : []).map(section => ({
+                name: normalizeText(section?.name, 'Unknown Section'),
+                count: Number(section?.count || 0)
+              }))
+            }))
+          }))
+        }))
+      }));
+    }
+
+    function computeStatsFromHierarchy(hierarchy) {
+      const colleges = Array.isArray(hierarchy) ? hierarchy : [];
+      let students = 0;
+      let degreeCount = 0;
+      let departmentCount = 0;
+      let batchCount = 0;
+
+      for (const college of colleges) {
+        students += Number(college?.count || 0);
+        const degrees = Array.isArray(college?.degrees) ? college.degrees : [];
+        degreeCount += degrees.length;
+
+        for (const degree of degrees) {
+          const departments = Array.isArray(degree?.departments) ? degree.departments : [];
+          departmentCount += departments.length;
+
+          for (const department of departments) {
+            const batches = Array.isArray(department?.batches) ? department.batches : [];
+            batchCount += batches.length;
+          }
+        }
+      }
+
+      return {
+        students,
+        colleges: colleges.length,
+        degrees: degreeCount,
+        departments: departmentCount,
+        batches: batchCount
+      };
+    }
+
+    function collegeNameKey(name) {
+      return String(name || '').trim().toLowerCase();
+    }
+
+    function getCollegeSearchHaystack(college) {
+      const pieces = [college?.name || ''];
+      const degrees = Array.isArray(college?.degrees) ? college.degrees : [];
+      for (const degree of degrees) {
+        pieces.push(degree?.name || '');
+        const departments = Array.isArray(degree?.departments) ? degree.departments : [];
+        for (const department of departments) {
+          pieces.push(department?.name || '');
+          const batches = Array.isArray(department?.batches) ? department.batches : [];
+          for (const batch of batches) {
+            pieces.push(batch?.name || '');
+            const sections = Array.isArray(batch?.sections) ? batch.sections : [];
+            for (const section of sections) {
+              pieces.push(section?.name || '');
+            }
+          }
+        }
+      }
+      return pieces.join(' || ').toLowerCase();
+    }
+
+    function filterHierarchyForSearch(hierarchy, rawQuery) {
+      const q = String(rawQuery || '').trim().toLowerCase();
+      if (!q) return Array.isArray(hierarchy) ? hierarchy : [];
+      return (Array.isArray(hierarchy) ? hierarchy : []).filter(college => getCollegeSearchHaystack(college).includes(q));
+    }
+
+    function createNode(depth, label, count, openByDefault = false) {
+      const details = document.createElement('details');
+      details.className = `node node-depth-${depth} p-3`;
+      if (openByDefault) details.open = true;
+
+      const summary = document.createElement('summary');
+      summary.className = 'flex items-center justify-between gap-3';
+
+      const left = document.createElement('div');
+      left.className = 'flex items-center gap-2 min-w-0';
+
+      const icon = document.createElement('span');
+      icon.className = 'material-symbols-rounded text-[18px] muted';
+      icon.textContent = 'account_tree';
+
+      const text = document.createElement('span');
+      text.className = 'font-semibold truncate';
+      text.textContent = label;
+
+      const right = document.createElement('span');
+      right.className = 'badge';
+      right.textContent = `${count} students`;
+
+      left.appendChild(icon);
+      left.appendChild(text);
+      summary.appendChild(left);
+      summary.appendChild(right);
+      details.appendChild(summary);
+      return details;
+    }
+
+    function renderCollegeHierarchy(college) {
+      const holder = document.createElement('div');
+      holder.className = 'space-y-2';
+
+      const degrees = Array.isArray(college?.degrees) ? college.degrees : [];
+      for (const degree of degrees) {
+        const degreeEl = createNode(2, `Degree: ${degree.name}`, Number(degree.count || 0), false);
+
+        const departments = Array.isArray(degree?.departments) ? degree.departments : [];
+        for (const department of departments) {
+          const deptEl = createNode(3, `Department: ${department.name}`, Number(department.count || 0), false);
+
+          const batches = Array.isArray(department?.batches) ? department.batches : [];
+          for (const batch of batches) {
+            const batchEl = createNode(4, `Batch: ${batch.name}`, Number(batch.count || 0), false);
+
+            const sectionWrap = document.createElement('div');
+            sectionWrap.className = 'mt-3 ml-2 flex flex-wrap gap-2';
+            const sections = Array.isArray(batch?.sections) ? batch.sections : [];
+            for (const section of sections) {
+              const sectionTag = document.createElement('div');
+              sectionTag.className = 'section-pill';
+              sectionTag.textContent = `Section ${section.name} - ${Number(section.count || 0)}`;
+              sectionWrap.appendChild(sectionTag);
+            }
+
+            batchEl.appendChild(sectionWrap);
+            deptEl.appendChild(batchEl);
+          }
+
+          degreeEl.appendChild(deptEl);
+        }
+
+        holder.appendChild(degreeEl);
+      }
+
+      return holder;
+    }
+
+    function createMetricPill(iconName, text) {
+      const pill = document.createElement('div');
+      pill.className = 'inline-flex items-center gap-1 rounded-full border border-black/10 dark:border-white/15 bg-white/85 dark:bg-white/10 px-2.5 py-1 text-[11px] font-semibold';
+      pill.innerHTML = `<span class="material-symbols-rounded text-[13px]">${iconName}</span>${text}`;
+      return pill;
+    }
+
+    function createCollegeCard(college, index) {
+      const palette = [
+        'from-[#9E4B8A]/70 via-[#D18DC2]/60 to-[#4C2A59]/80',
+        'from-[#FF7FD1]/55 via-[#9E4B8A]/60 to-[#4C2A59]/80',
+        'from-[#E7D0E4]/65 via-white/40 to-[#9E4B8A]/70',
+        'from-[#7F57D1]/55 via-[#9E4B8A]/60 to-[#4C2A59]/80',
+        'from-[#4C2A59]/65 via-[#C88DBA]/55 to-[#9E4B8A]/70'
+      ];
+
+      const key = collegeNameKey(college?.name);
+      const accent = palette[index % palette.length];
+      const meta = collegeMetaByName.get(key) || null;
+
+      const article = document.createElement('article');
+      article.className = 'college-card relative overflow-hidden p-5 transition';
+      article.dataset.collegeKey = key;
+
+      const glow = document.createElement('div');
+      glow.className = `absolute inset-x-5 top-4 h-28 rounded-3xl bg-gradient-to-r ${accent} opacity-25 blur-3xl pointer-events-none`;
+      article.appendChild(glow);
+
+      const logoWrap = document.createElement('div');
+      logoWrap.className = 'absolute top-1/2 -translate-y-1/2 right-4 z-20 pointer-events-none';
+      if (meta?.logo_url) {
+        const img = document.createElement('img');
+        img.src = meta.logo_url;
+        img.alt = `${college.name} logo`;
+        img.className = 'h-20 w-20 rounded-2xl object-cover ring-2 ring-white/60 dark:ring-white/10 shadow-md';
+        logoWrap.appendChild(img);
+      } else {
+        const fallback = document.createElement('div');
+        fallback.className = 'h-20 w-20 rounded-2xl bg-gradient-to-br from-[#9E4B8A] to-[#4C2A59] text-white grid place-items-center text-[11px] font-semibold ring-2 ring-white/40 dark:ring-white/10 shadow-md';
+        fallback.textContent = 'LOGO';
+        logoWrap.appendChild(fallback);
+      }
+      article.appendChild(logoWrap);
+
+      const content = document.createElement('div');
+      content.className = 'pr-20 pt-1';
+
+      const title = document.createElement('h3');
+      title.className = 'text-lg font-semibold text-neutral-900 dark:text-white leading-snug';
+      title.textContent = college.name;
+      content.appendChild(title);
+
+      const subtitle = document.createElement('p');
+      subtitle.className = 'mt-3 text-sm text-neutral-600 dark:text-white/65';
+      subtitle.textContent = 'Dive into its degrees, departments, batches, and section distribution.';
+      content.appendChild(subtitle);
+
+      const metrics = document.createElement('div');
+      metrics.className = 'mt-4 flex flex-wrap gap-2';
+      const degreeCount = Array.isArray(college?.degrees) ? college.degrees.length : 0;
+      let deptCount = 0;
+      let batchCount = 0;
+      for (const degree of (Array.isArray(college?.degrees) ? college.degrees : [])) {
+        const depts = Array.isArray(degree?.departments) ? degree.departments : [];
+        deptCount += depts.length;
+        for (const department of depts) {
+          batchCount += (Array.isArray(department?.batches) ? department.batches.length : 0);
+        }
+      }
+      metrics.appendChild(createMetricPill('groups', `${Number(college?.count || 0)} students`));
+      metrics.appendChild(createMetricPill('school', `${degreeCount} degrees`));
+      metrics.appendChild(createMetricPill('hub', `${deptCount} depts`));
+      metrics.appendChild(createMetricPill('calendar_month', `${batchCount} batches`));
+      content.appendChild(metrics);
+
+      const action = document.createElement('button');
+      action.type = 'button';
+      action.className = 'mt-5 inline-flex items-center gap-2 text-sm font-medium text-[#9E4B8A] dark:text-white/85';
+      action.innerHTML = 'Open hierarchy <span class="material-symbols-rounded text-base">arrow_forward</span>';
+      content.appendChild(action);
+
+      article.appendChild(content);
+
+      const openCollegePage = (event) => {
+        event.preventDefault();
+        const params = new URLSearchParams();
+        const collegeId = String(college?.id || meta?.id || '').trim();
+        if (collegeId) params.set('collegeId', collegeId);
+        params.set('collegeName', String(college?.name || ''));
+        window.location.href = `branch_college.html?${params.toString()}`;
+      };
+
+      article.addEventListener('click', openCollegePage);
+      action.addEventListener('click', (event) => {
+        event.stopPropagation();
+        openCollegePage(event);
+      });
+
+      return article;
+    }
+
+    function updateStats(stats) {
+      ui.statStudents.textContent = String(Number(stats?.students || 0));
+      ui.statColleges.textContent = String(Number(stats?.colleges || 0));
+      ui.statDegrees.textContent = String(Number(stats?.degrees || 0));
+      ui.statDepartments.textContent = String(Number(stats?.departments || 0));
+      ui.statBatches.textContent = String(Number(stats?.batches || 0));
+    }
+
+    function renderCollegeCards(hierarchy, stats) {
+      const colleges = Array.isArray(hierarchy) ? hierarchy : [];
+      ui.hierarchyRoot.innerHTML = '';
+      updateStats(stats);
+
+      if (!colleges.length) {
+        ui.emptyText.classList.remove('hidden');
+        return;
+      }
+
+      ui.emptyText.classList.add('hidden');
+      colleges.forEach((college, index) => {
+        ui.hierarchyRoot.appendChild(createCollegeCard(college, index));
+      });
+    }
+
+    let lastStudents = [];
+    let lastHierarchy = [];
+    const collegeMetaByName = new Map();
+
+    function rerenderWithSearch() {
+      const filtered = filterHierarchyForSearch(lastHierarchy, ui.searchInput.value);
+      const stats = computeStatsFromHierarchy(filtered);
+      renderCollegeCards(filtered, stats);
+    }
+
+    async function fetchServerHierarchy(apiBase) {
+      const url = new URL(apiBase + '/api/admin/branch-hierarchy');
+
+      const res = await fetch(url.toString(), {
+        method: 'GET',
+        headers: { ...authHeaders() },
+        credentials: 'include'
+      });
+      if (res.status === 404) return null;
+      if (res.status === 401) throw new Error('Unauthorized. Please sign in as admin.');
+      if (res.status === 403) throw new Error('Forbidden. This page is only for admin users.');
+      if (!res.ok) {
+        const out = await res.json().catch(() => ({}));
+        throw new Error(out?.detail || `Failed to load hierarchy (${res.status})`);
+      }
+      return await res.json().catch(() => ({}));
+    }
+
+    async function fetchCollegeMetadata(apiBase) {
+      const res = await fetch(apiBase + '/api/colleges', {
+        method: 'GET',
+        headers: { ...authHeaders() },
+        credentials: 'include'
+      });
+      if (!res.ok) return [];
+      const rows = await res.json().catch(() => []);
+      return Array.isArray(rows) ? rows : [];
+    }
+
+    async function loadAndRender() {
+      clearError();
+      setStatus('Loading users...', 'hourglass_empty');
+      try {
+        const apiBase = await resolveApiBase();
+        await requireAdminAccess(apiBase);
+        const [serverPayload, colleges] = await Promise.all([
+          fetchServerHierarchy(apiBase),
+          fetchCollegeMetadata(apiBase).catch(() => [])
+        ]);
+
+        collegeMetaByName.clear();
+        for (const college of colleges) {
+          const key = collegeNameKey(college?.name);
+          if (key) collegeMetaByName.set(key, college);
+        }
+
+        if (serverPayload && Array.isArray(serverPayload.hierarchy)) {
+          let normalized = normalizeHierarchyPayload(serverPayload.hierarchy);
+          // Filter: only show colleges that actually exist in the colleges DB table
+          if (colleges.length) {
+            const dbCollegeNames = new Set(colleges.map(c => collegeNameKey(c?.name)));
+            const dbCollegeIds = new Set(colleges.map(c => String(c?.id || '').trim()).filter(Boolean));
+            normalized = normalized.filter(college => {
+              if (college.id && dbCollegeIds.has(String(college.id).trim())) return true;
+              return dbCollegeNames.has(collegeNameKey(college.name));
+            });
+          }
+          lastHierarchy = normalized;
+          rerenderWithSearch();
+          const totals = computeStatsFromHierarchy(lastHierarchy);
+          setStatus(`Loaded ${totals.students} students`, 'check_circle');
+          return;
+        }
+
+        // Fallback path for older backend builds.
+        const users = await fetchAllUsers(apiBase);
+        const normalized = users.map(normalizeUserRecord);
+        const studentsOnly = dedupeUsersByIdentity(normalized.filter(isStudentRecord));
+        lastStudents = studentsOnly;
+        const built = buildHierarchy(studentsOnly);
+        let fallbackHierarchy = mapTreeToHierarchy(built.tree);
+        // Filter: only show colleges that actually exist in the colleges DB table
+        if (colleges.length) {
+          const dbCollegeNames = new Set(colleges.map(c => collegeNameKey(c?.name)));
+          const dbCollegeIds = new Set(colleges.map(c => String(c?.id || '').trim()).filter(Boolean));
+          fallbackHierarchy = fallbackHierarchy.filter(college => {
+            if (college.id && dbCollegeIds.has(String(college.id).trim())) return true;
+            return dbCollegeNames.has(collegeNameKey(college.name));
+          });
+        }
+        lastHierarchy = fallbackHierarchy;
+
+        rerenderWithSearch();
+        setStatus(`Loaded ${studentsOnly.length} students (fallback)`, 'check_circle');
+      } catch (err) {
+        setStatus('Load failed', 'error');
+        showError(err instanceof Error ? err.message : 'Failed to load hierarchy data.');
+        ui.hierarchyRoot.innerHTML = '';
+        ui.emptyText.classList.remove('hidden');
+        ui.searchInput.disabled = true;
+        ui.refreshBtn.disabled = true;
+      }
+    }
+
+    let searchTimer = null;
+    ui.searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => rerenderWithSearch(), 150);
+    });
+
+    ui.refreshBtn.addEventListener('click', () => {
+      loadAndRender();
+    });
+
+    loadAndRender();

@@ -1,0 +1,542 @@
+/* Notes workspace styles: the original pages' <style> blocks, scoped to the workspace root. */
+
+.root {
+  --surface: #ffffff;
+  --surface-dim: #fbf8fc;
+  --surface-contrast: #1e1e2f;
+  --outline: rgba(30, 30, 47, 0.1);
+  --muted: #5b6178;
+  --brand: #9e4b8a;
+  --brand-strong: #4c2a59;
+  --brand-soft: #f3e7f2;
+  --chip: #faf5fb;
+  --kbd: #f3e7f2;
+  /* The originals did not use grayscale font smoothing. */
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+}
+
+:global(.dark) .root {
+  --surface: #1e1e2f;
+  --surface-dim: #201934;
+  --surface-contrast: #eaeaf2;
+  --outline: rgba(255, 255, 255, 0.12);
+  --muted: #c9c6d8;
+  --brand-strong: #ca6cb3;
+  --brand-soft: rgba(255, 255, 255, 0.06);
+  --chip: rgba(255, 255, 255, 0.08);
+  --kbd: rgba(255, 255, 255, 0.08);
+}
+
+/* Density toggle (maths / img_gen): the page text shrinks and every control gets the same vertical padding. */
+.denseOn {
+  font-size: 0.95rem;
+}
+.denseOn :is(input, button, textarea) {
+  padding-top: 0.5rem !important;
+  padding-bottom: 0.5rem !important;
+}
+.denseOff :is(input, button, textarea) {
+  padding-top: 0.75rem !important;
+  padding-bottom: 0.75rem !important;
+}
+
+/* Headings: undo the site-wide light-mode heading colour so they inherit like the originals. */
+.root.root.root :is(h1, h2, h3, h4, h5, h6) {
+  color: inherit;
+}
+
+.glass {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid var(--outline);
+}
+:global(.dark) .glass {
+  background: rgba(15, 18, 38, 0.55);
+}
+
+/* Material ripple */
+.ripple {
+  overflow: hidden;
+  isolation: isolate;
+}
+.rippleWave {
+  position: absolute;
+  border-radius: 9999px;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: notes-ripple 0.55s ease-out forwards;
+}
+@keyframes notes-ripple {
+  from {
+    width: 0;
+    height: 0;
+    opacity: 0.12;
+  }
+  45% {
+    opacity: 0.12;
+  }
+  to {
+    width: var(--ripple-size);
+    height: var(--ripple-size);
+    opacity: 0;
+  }
+}
+
+/* Static shimmer placeholder (the shimmer keyframes never existed in the original stylesheet). */
+.skeleton {
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.06) 25%, rgba(0, 0, 0, 0.12) 37%, rgba(0, 0, 0, 0.06) 63%);
+  background-size: 800px 100%;
+}
+
+.thinScroll {
+  scrollbar-width: thin;
+}
+.thinScroll::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.thinScroll::-webkit-scrollbar-thumb {
+  background: #cdd4ff;
+  border-radius: 9999px;
+}
+
+.customScroll::-webkit-scrollbar {
+  width: 6px;
+}
+.customScroll::-webkit-scrollbar-thumb {
+  background: var(--outline);
+  border-radius: 4px;
+}
+
+/* Hidden on phones regardless of other display utilities (emphasis/fullscreen controls). */
+@media (max-width: 640px) {
+  .hideOnPhone {
+    display: none !important;
+  }
+}
+
+/* ---- Output -------------------------------------------------------------- */
+
+.wrap.loading {
+  min-height: 360px;
+}
+
+.loaderBox {
+  width: clamp(180px, 45vw, 360px);
+  aspect-ratio: 1 / 1;
+}
+
+.output :where(h1, h2, h3, h4) {
+  scroll-margin-top: 6rem;
+}
+.output.output.output :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--tw-prose-headings);
+}
+.output pre {
+  border-radius: 0.75rem;
+  border: 1px solid var(--outline);
+  background: #0b1020;
+  color: #e5e7eb;
+}
+.output code:not(pre code) {
+  background: var(--kbd);
+  padding: 0.18rem 0.4rem;
+  border-radius: 0.35rem;
+}
+.output img {
+  border-radius: 0.75rem;
+}
+.output table {
+  max-width: 100%;
+}
+.output ::selection {
+  background: #9f4e8d;
+  color: #ffffff;
+}
+.emph .output strong {
+  background: var(--brand-soft);
+  color: var(--surface-contrast);
+  padding: 0.06rem 0.25rem;
+  border-radius: 0.25rem;
+}
+
+/* highlight.js "github" theme (the originals loaded github.min.css) */
+.output pre code:global(.hljs) {
+  display: block;
+  overflow-x: auto;
+  padding: 1em;
+}
+.output code:global(.hljs) {
+  padding: 3px 5px;
+}
+.output :global(.hljs) {
+  color: #24292e;
+  background: #fff;
+}
+.output :is(:global(.hljs-doctag), :global(.hljs-keyword), :global(.hljs-template-tag), :global(.hljs-template-variable), :global(.hljs-type), :global(.hljs-variable.language_)) {
+  color: #d73a49;
+}
+.output :is(:global(.hljs-title), :global(.hljs-title.class_), :global(.hljs-title.function_)) {
+  color: #6f42c1;
+}
+.output :is(:global(.hljs-attr), :global(.hljs-attribute), :global(.hljs-literal), :global(.hljs-meta), :global(.hljs-number), :global(.hljs-operator), :global(.hljs-selector-attr), :global(.hljs-selector-class), :global(.hljs-selector-id), :global(.hljs-variable)) {
+  color: #005cc5;
+}
+.output :is(:global(.hljs-regexp), :global(.hljs-string)) {
+  color: #032f62;
+}
+.output :is(:global(.hljs-built_in), :global(.hljs-symbol)) {
+  color: #e36209;
+}
+.output :is(:global(.hljs-code), :global(.hljs-comment), :global(.hljs-formula)) {
+  color: #6a737d;
+}
+.output :is(:global(.hljs-name), :global(.hljs-quote), :global(.hljs-selector-pseudo), :global(.hljs-selector-tag)) {
+  color: #22863a;
+}
+.output :is(:global(.hljs-subst)) {
+  color: #24292e;
+}
+.output :global(.hljs-section) {
+  color: #005cc5;
+  font-weight: 700;
+}
+.output :global(.hljs-bullet) {
+  color: #735c0f;
+}
+.output :global(.hljs-emphasis) {
+  color: #24292e;
+  font-style: italic;
+}
+.output :global(.hljs-strong) {
+  color: #24292e;
+  font-weight: 700;
+}
+.output :global(.hljs-addition) {
+  color: #22863a;
+  background-color: #f0fff4;
+}
+.output :global(.hljs-deletion) {
+  color: #b31d28;
+  background-color: #ffeef0;
+}
+
+/* Citation pills and the one-line citations list */
+.citationPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0.5rem;
+  height: 20px;
+  line-height: 18px;
+  border-radius: 9999px;
+  border: 1px solid var(--outline);
+  background: var(--chip);
+  color: inherit;
+  font-size: 11px;
+  text-decoration: none;
+  vertical-align: text-bottom;
+}
+.citationPill img {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  object-fit: cover;
+  margin: 0;
+}
+.citationsList {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+.citationItem {
+  display: block;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--outline);
+  background: var(--chip);
+  color: inherit;
+  font-size: 0.9rem;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.citationItem:hover {
+  background: color-mix(in oklab, var(--brand-soft) 60%, transparent);
+}
+
+/* ---- Related videos -------------------------------------------------------- */
+
+.ytCarousel {
+  display: flex;
+  gap: 1.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+}
+.ytCarousel::-webkit-scrollbar {
+  height: 8px;
+}
+.ytCarousel::-webkit-scrollbar-thumb {
+  background: var(--outline);
+  border-radius: 9999px;
+}
+.ytCard {
+  flex: 0 0 260px;
+  scroll-snap-align: start;
+  border: 1px solid var(--outline);
+  border-radius: 1rem;
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: inherit;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+  position: relative;
+}
+.ytCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 28px rgba(37, 99, 235, 0.18);
+}
+.ytThumb {
+  position: relative;
+  padding-top: 56.25%;
+  background: #000;
+}
+.ytThumb > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ytDuration {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.ytOverlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(155deg, rgba(8, 7, 31, 0.75), rgba(88, 28, 135, 0.45));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 2;
+}
+.ytCard:hover .ytOverlay,
+.ytCard:focus-within .ytOverlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+.ytHoverBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+  box-shadow: 0 12px 22px rgba(15, 23, 42, 0.35);
+  font-size: 0;
+  background: linear-gradient(135deg, #4c2a59, #b06ab3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.ytHoverBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 24px rgba(15, 23, 42, 0.45);
+}
+.ytHoverBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.ytHoverIcon {
+  font-size: 22px;
+  line-height: 1;
+  color: inherit;
+}
+.ytBody {
+  padding: 0.75rem 0.95rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+.ytTitle {
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.ytMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.ytChannelLogo {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  object-fit: cover;
+  border: 1px solid var(--outline);
+  flex-shrink: 0;
+}
+.ytChannelName {
+  font-weight: 600;
+  color: var(--surface-contrast);
+}
+.ytViews {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.ytSkeletonGrid {
+  display: flex;
+  gap: 1.5rem;
+  overflow: hidden;
+}
+.ytSkeletonCard {
+  flex: 0 0 260px;
+  height: 180px;
+  border-radius: 1rem;
+  background: rgba(148, 163, 184, 0.2);
+}
+@media (max-width: 640px) {
+  .ytCard {
+    flex: 0 0 200px;
+  }
+  .ytThumb {
+    padding-top: 45%;
+  }
+  .ytSkeletonCard {
+    flex: 0 0 200px;
+    height: 130px;
+  }
+  .ytSkeletonGrid {
+    gap: 1rem;
+  }
+  .videosBody {
+    padding-top: 0.75rem !important;
+    padding-bottom: 0.75rem !important;
+  }
+}
+
+/* "Topics left today" toast (plan limits) */
+.topicToast {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 95;
+  max-width: min(90vw, 320px);
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.8rem;
+  border: 1px solid var(--outline);
+  background: color-mix(in oklab, var(--surface) 86%, var(--brand-soft));
+  color: var(--surface-contrast);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.18);
+  font-size: 0.8rem;
+  font-weight: 600;
+  transform: translateX(125%);
+  opacity: 0;
+  transition:
+    transform 0.34s ease,
+    opacity 0.34s ease;
+  pointer-events: none;
+}
+.topicToast.show {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+/* ---- Inline selection assistant ------------------------------------------- */
+
+.selectionFab {
+  position: absolute;
+  z-index: 70;
+  border: 1px solid var(--outline);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 6px;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease;
+}
+.selectionFab:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.25);
+}
+.selectionPanel {
+  position: absolute;
+  z-index: 70;
+  width: 420px;
+  backdrop-filter: blur(18px);
+}
+.selectionContext {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 1.5rem;
+}
+.selectionOutput.selectionOutput.selectionOutput :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--tw-prose-headings);
+}
+.selectionOutput :is(p, ul, ol) {
+  margin: 0.35rem 0;
+  font-size: 0.85rem;
+}
+.selectionOutput::-webkit-scrollbar {
+  width: 6px;
+}
+.selectionOutput::-webkit-scrollbar-thumb {
+  background: var(--outline);
+  border-radius: 4px;
+}
+
+/* ---- Floating AI assistant (maths) ----------------------------------------- */
+
+.aiPanel.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.aiPanel::-webkit-scrollbar {
+  width: 8px;
+}
+.aiPanel::-webkit-scrollbar-thumb {
+  background: var(--outline);
+  border-radius: 4px;
+}

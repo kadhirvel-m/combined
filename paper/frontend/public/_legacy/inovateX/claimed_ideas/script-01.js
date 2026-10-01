@@ -1,0 +1,2 @@
+// Extracted from ui/inovateX/claimed_ideas.html (inline <script> #1).
+        tailwind.config = { darkMode: 'class', theme: { container: { center: true, padding: '1rem' }, extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] }, colors: { brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' }, brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 500: '#9E4B8A' } } } } }

@@ -1,0 +1,102 @@
+        :root {
+            color-scheme: light;
+            /* Will be updated at runtime to match the fixed header height */
+            --header-h: 80px;
+            --header-gap: 16px;
+            --sticky-top: calc(var(--header-h) + var(--header-gap));
+        }
+
+        body {
+            min-height: 100vh;
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+            background: linear-gradient(180deg, #f7f4fb 0%, #ffffff 30%, #eff1ff 100%);
+            transition: background .3s ease, color .3s ease;
+        }
+
+        body[data-theme="dark"] {
+            color-scheme: dark;
+            background: radial-gradient(900px 600px at 65% -150px, rgba(87, 232, 255, .18), transparent 70%), linear-gradient(180deg, #05070f 0%, #10152b 55%, #0b0e1d 100%);
+        }
+
+        .notes-grid {
+            display: grid;
+            gap: 2rem;
+        }
+
+        @media (min-width: 1024px) {
+            .notes-grid {
+                grid-template-columns: 1fr 4fr;
+            }
+
+            .notes-sidebar {
+                position: sticky;
+                top: var(--sticky-top, 8.5rem);
+                align-self: flex-start;
+            }
+        }
+
+        .surface {
+            background: rgba(255, 255, 255, 0.88);
+            border-radius: 24px;
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+            backdrop-filter: blur(18px);
+        }
+
+        body[data-theme="dark"] .surface {
+            background: rgba(12, 19, 35, 0.78);
+            border: 1px solid rgba(94, 234, 212, 0.14);
+            box-shadow: 0 32px 80px rgba(2, 6, 23, 0.55);
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            padding: .35rem .8rem;
+            border-radius: 999px;
+            font-size: .75rem;
+            font-weight: 600;
+            background: rgba(148, 163, 184, 0.16);
+            color: rgba(30, 41, 59, 0.68);
+        }
+
+        body[data-theme="dark"] .pill {
+            background: rgba(148, 163, 184, 0.12);
+            color: rgba(226, 232, 240, 0.78);
+        }
+
+        .notes-scroll {
+            max-height: calc(100vh - 12rem);
+            overflow-y: auto;
+        }
+
+        .notes-scroll::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .notes-scroll::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.4);
+            border-radius: 999px;
+        }
+
+        body[data-theme="dark"] .notes-scroll::-webkit-scrollbar-thumb {
+            background: rgba(94, 234, 212, 0.35);
+        }
+
+        /* Ensure loader has room inside the answer box while loading */
+        .notes-scroll.loading {
+            min-height: 360px;
+        }
+
+        /* Shared loader box to keep the animation square and responsive */
+        .px-loader-box {
+            width: clamp(180px, 45vw, 360px);
+            aspect-ratio: 1 / 1;
+        }
+
+        .px-loader-box>dotlottie-wc {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
