@@ -1,0 +1,3989 @@
+// Extracted from ui/medical_notes.html (inline <script> #4).
+    const __scriptCache = new Map();
+    const __styleCache = new Set();
+
+    function loadScriptOnce(src, opts = {}) {
+      if (__scriptCache.has(src)) return __scriptCache.get(src);
+      const p = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        if (opts.module) s.type = 'module';
+        s.async = true;
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error(`Failed to load ${src}`));
+        document.head.appendChild(s);
+      });
+      __scriptCache.set(src, p);
+      return p;
+    }
+
+    function loadStyleOnce(href) {
+      if (__styleCache.has(href)) return;
+      const l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.href = href;
+      document.head.appendChild(l);
+      __styleCache.add(href);
+    }
+
+    const LOTTIE_SRC = 'https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.5/dist/dotlottie-wc.js';
+    async function ensureLottie() {
+      if (window.customElements && window.customElements.get('dotlottie-wc')) return;
+      try { await loadScriptOnce(LOTTIE_SRC, { module: true }); } catch { }
+    }
+
+    let __mdRuntimePromise = null;
+    async function ensureMarkdownRuntime() {
+      if (__mdRuntimePromise) return __mdRuntimePromise;
+      __mdRuntimePromise = (async () => {
+        loadStyleOnce('https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css');
+        loadStyleOnce('https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css');
+        await Promise.all([
+          loadScriptOnce('https://cdn.jsdelivr.net/npm/marked/marked.min.js'),
+          loadScriptOnce('https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js'),
+          loadScriptOnce('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js'),
+          loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js'),
+        ]);
+        await loadScriptOnce('https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js');
+        await loadScriptOnce('https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js');
+        try { mermaid.initialize({ startOnLoad: false, theme: 'default' }); } catch { }
+        try { marked.use({ gfm: true, breaks: true, mangle: false, headerIds: true }); } catch { }
+      })();
+      return __mdRuntimePromise;
+    }
+
+    // Central API base (supports file:// open or custom API_BASE)
+    let __defaultBase = 'http://0.0.0.0:10000';
+    if (/^https?:/i.test(window.location.origin)) {
+      const host = window.location.host;
+      if (/localhost:5500|127\.0\.0\.1:5500/.test(host)) {
+        __defaultBase = 'http://0.0.0.0:10000';
+      } else {
+        __defaultBase = window.location.origin;
+      }
+    }
+    const apiBase = (window.API_BASE || __defaultBase).replace(/\/$/, '');
+
+    // ===== Elements =====
+    const $relatedVideosSection = document.getElementById('relatedVideosSection');
+    const $relatedVideosSummary = document.getElementById('relatedVideosSummary');
+    const $relatedVideosSkeleton = document.getElementById('relatedVideosSkeleton');
+    const $relatedVideosWrap = document.getElementById('relatedVideosWrap');
+    const $relatedVideosCarousel = document.getElementById('relatedVideoCarousel');
+    const $relatedVideosEmpty = document.getElementById('relatedVideosEmpty');
+    const $refreshVideos = document.getElementById('refreshVideosBtn');
+    const $videoLanguage = document.getElementById('videoLanguageSelect');
+    const $topic = document.getElementById('topic');
+    const $generate = document.getElementById('generateBtn');
+    const $regen = document.getElementById('regenBtn');
+    const $regenMobile = document.getElementById('regenBtnMobile');
+    const $cancel = document.getElementById('cancelBtn');
+    const $output = document.getElementById('output');
+    const $images = document.getElementById('images');
+    const $toc = document.getElementById('toc');
+    const $progress = document.getElementById('progressBar');
+    const $copy = document.getElementById('copyBtn');
+    const $download = document.getElementById('downloadBtn');
+    const $emphBtn = document.getElementById('emphBtn');
+    const $expand = document.getElementById('expandBtn');
+    const $wrap = document.getElementById('outputWrap');
+    const $outputLoader = document.getElementById('outputLoader');
+    const $editToggle = document.getElementById('editToggle');
+    const $save = document.getElementById('saveBtn');
+    const $myNoteBtn = document.getElementById('myNoteBtn');
+    const $editor = document.getElementById('editor');
+    const $snack = document.getElementById('snack');
+    const $themeBtn = document.getElementById('themeBtn');
+    const $themeIcon = document.getElementById('themeIcon');
+    const $themeText = document.getElementById('themeText');
+    const $densityBtn = document.getElementById('densityBtn');
+    const $fsCtrl = document.getElementById('fsControls');
+    const $fsTheme = document.getElementById('fsThemeBtn');
+    const $fsExit = document.getElementById('fsExitBtn');
+    const $fsHome = document.getElementById('fsHomeBtn');
+    const $flashcardBtn = document.getElementById('flashcardBtn');
+    const $mcqBtn = document.getElementById('clinqBtn');
+    const $medmapBtn = document.querySelector('[data-tool="medmap"]');
+    const $caseflowBtn = document.querySelector('[data-tool="caseflow"]');
+    const $vivaBtn = document.querySelector('[data-tool="viva"]');
+    const $decisionTreeBtn = document.querySelector('[data-tool="decision-tree"]');
+    const $matchFollBtn = document.getElementById('matchFollBtn');
+    const flashcardDefaultLabel = $flashcardBtn ? ($flashcardBtn.textContent || 'Flashcards') : 'Flashcards';
+    const $variantDetailed = document.getElementById('variantDetailed');
+    const $variantCheatsheet = document.getElementById('variantCheatsheet');
+    // inline panel action buttons are wired inside the inline IIFE
+
+    const fallbackChannelLogo = 'https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png';
+    const channelLogoCache = new Map();
+    let relatedVideosAbort = null;
+    let relatedVideosTopic = '';
+    let relatedVideosFullQuery = '';
+    let relatedVideosLanguage = ($videoLanguage?.value || 'English');
+    let relatedVideosDebounce = null;
+
+    // ===== Degree handling (exactly mirrors notes_generator.html) =====
+    const DEGREE_KEY = 'paperx:degree';
+    function getStoredDegree() {
+      try { return localStorage.getItem(DEGREE_KEY) || ''; } catch { return ''; }
+    }
+    function setStoredDegree(v) {
+      try { if (v) localStorage.setItem(DEGREE_KEY, v); else localStorage.removeItem(DEGREE_KEY); } catch { }
+    }
+    function getSelectedDegree() {
+      return (getStoredDegree() || '').trim();
+    }
+
+    // Auto-resolve degree from logged-in profile (mirrors notes_generator.html)
+    async function autoResolveDegreeFromProfile() {
+      try {
+        const token = getAuthToken();
+        if (!token) return false;
+        const meRes = await fetch(`${apiBase}/api/me`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!meRes.ok) return false;
+        const me = await meRes.json();
+        const deptId = me && me.profile && me.profile.department && me.profile.department.id;
+        if (!deptId) return false;
+        const metaRes = await fetch(`${apiBase}/api/public/academic-meta`);
+        if (!metaRes.ok) return false;
+        const meta = await metaRes.json();
+        const depts = Array.isArray(meta && meta.departments) ? meta.departments : [];
+        const degrees = Array.isArray(meta && meta.degrees) ? meta.degrees : [];
+        const dept = depts.find(d => String(d.id) === String(deptId));
+        if (!dept || !dept.degree_id) return false;
+        const deg = degrees.find(g => String(g.id) === String(dept.degree_id));
+        const label = (deg && deg.name) ? String(deg.name).trim() : '';
+        if (!label) return false;
+        setStoredDegree(label);
+        console.log('[MedicalNotes] Degree resolved from profile:', label);
+        return true;
+      } catch { return false; }
+    }
+    // Fire and forget — best-effort resolve before first generation
+    autoResolveDegreeFromProfile();
+
+    function normalizeVideoLanguage(language) {
+      return (language || '').trim();
+    }
+
+    function buildRelatedVideosQuery(baseTopic, language) {
+      const topic = (baseTopic || '').trim();
+      if (!topic) return '';
+      const lang = normalizeVideoLanguage(language);
+      if (!lang) return topic;
+      if (lang.toLowerCase() === 'english') return topic;
+      const suffix = ` in ${lang}`;
+      if (topic.toLowerCase().endsWith(suffix.toLowerCase())) {
+        return topic;
+      }
+      return `${topic}${suffix}`;
+    }
+
+    function resetFlashcardAccess() {
+      if (!$flashcardBtn) return;
+      $flashcardBtn.classList.add('hidden');
+      $flashcardBtn.disabled = true;
+      $flashcardBtn.setAttribute('aria-disabled', 'true');
+      $flashcardBtn.dataset.noteId = '';
+      $flashcardBtn.dataset.topic = '';
+      $flashcardBtn.classList.remove('pointer-events-none', 'opacity-70');
+      if (flashcardDefaultLabel) {
+        $flashcardBtn.textContent = flashcardDefaultLabel;
+      }
+    }
+
+    function resetMCQAccess() {
+      if (!$mcqBtn) return;
+      $mcqBtn.dataset.noteId = '';
+      $mcqBtn.dataset.topic = '';
+    }
+
+    function enableFlashcardAccess(noteId, topic) {
+      if (!$flashcardBtn) return;
+      $flashcardBtn.dataset.noteId = noteId || '';
+      $flashcardBtn.dataset.topic = topic || '';
+      $flashcardBtn.disabled = false;
+      $flashcardBtn.removeAttribute('aria-disabled');
+      $flashcardBtn.classList.remove('hidden');
+      $flashcardBtn.classList.remove('pointer-events-none', 'opacity-70');
+      if (flashcardDefaultLabel) {
+        $flashcardBtn.textContent = flashcardDefaultLabel;
+      }
+    }
+
+    function enableMCQAccess(noteId, topic) {
+      if (!$mcqBtn) return;
+      $mcqBtn.dataset.noteId = noteId || '';
+      $mcqBtn.dataset.topic = topic || '';
+    }
+
+    function openFlashcards() {
+      if (!$flashcardBtn) return;
+      const noteId = ($flashcardBtn.dataset.noteId || '').trim();
+      if (!noteId) {
+        snack('Generate notes first');
+        return;
+      }
+      const inferredTopic = (
+        ($flashcardBtn.dataset.topic || '')
+        || (document.querySelector('#output h1')?.textContent || '')
+        || ($topic.value || '')
+      ).trim();
+      try {
+        sessionStorage.setItem('paperx:lastFlashcardSeed', JSON.stringify({ noteId, topic: inferredTopic, ts: Date.now() }));
+      } catch (e) { /* ignore */ }
+      const search = new URLSearchParams({ noteId });
+      if (inferredTopic) {
+        search.set('topic', inferredTopic);
+      }
+      const target = `./flashcards.html?${search.toString()}`;
+      $flashcardBtn.classList.add('pointer-events-none', 'opacity-70');
+      $flashcardBtn.textContent = 'Opening…';
+      setTimeout(() => { window.location.href = target; }, 120);
+    }
+
+    function openMCQ() {
+      const noteId = ($mcqBtn ? ($mcqBtn.dataset.noteId || '') : '').trim();
+      if (!noteId) {
+        snack('Generate notes first');
+        return;
+      }
+      const inferredTopic = (
+        ($mcqBtn.dataset.topic || '')
+        || (document.querySelector('#output h1')?.textContent || '')
+        || ($topic ? $topic.value : '')
+      ).trim();
+
+      // ── Inline MCQ: render quiz inside #output ──
+      const savedHTML = $output.innerHTML;
+
+      // MCQ state
+      const mcqState = { questions: [], idx: 0, score: 0, touched: new Set(), selections: [] };
+
+      // Show loading
+      $output.innerHTML = `
+        <div style="text-align:center; padding:3rem 1rem;">
+          <div style="font-size:2rem; margin-bottom:.75rem;">⏳</div>
+          <h2 style="font-size:1.25rem; font-weight:700; margin:0 0 .5rem;">Generating MCQ…</h2>
+          <p style="color:var(--muted); font-size:.9rem;">Building questions from your notes. This may take a moment.</p>
+        </div>`;
+
+      // Fetch MCQ
+      (async () => {
+        try {
+          const url = `${apiBase}/notes/${encodeURIComponent(noteId)}/mcq`;
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic: inferredTopic || undefined, count: 10 })
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.detail || errData.error || `HTTP ${res.status}`);
+          }
+          const data = await res.json();
+          mcqState.questions = Array.isArray(data.questions) ? data.questions : [];
+          if (!mcqState.questions.length) throw new Error('No questions generated.');
+          mcqState.selections = new Array(mcqState.questions.length).fill(null);
+
+          renderMCQShell(data.topic || inferredTopic || 'MCQ Test');
+          renderMCQQuestion();
+        } catch (err) {
+          console.error('[MCQ]', err);
+          $output.innerHTML = `
+            <div style="text-align:center; padding:2rem 1rem;">
+              <div style="font-size:2rem; margin-bottom:.5rem;">❌</div>
+              <h2 style="font-size:1.15rem; font-weight:700; margin:0 0 .5rem;">MCQ generation failed</h2>
+              <p style="color:var(--muted); font-size:.85rem;">${err.message || 'Try again later.'}</p>
+              <button id="mcqBackBtn" class="ripple inline-flex items-center gap-2 px-4 py-2 mt-4 rounded-full border text-sm font-semibold hover:bg-[var(--brand-soft)] transition" style="border-color:var(--outline);">
+                <span class="material-symbols-rounded text-[16px]">arrow_back</span> Back to Notes
+              </button>
+            </div>`;
+          document.getElementById('mcqBackBtn')?.addEventListener('click', () => { $output.innerHTML = savedHTML; });
+        }
+      })();
+
+      function renderMCQShell(title) {
+        $output.innerHTML = `
+          <div id="mcqContainer">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.5rem; margin-bottom:1rem;">
+              <div style="display:flex; align-items:center; gap:.75rem; flex-wrap:wrap;">
+                <h2 style="margin:0; font-size:1.2rem; font-weight:700;">${title} — MCQ</h2>
+                <span id="mcqCountBadge" style="border:1px solid var(--outline); border-radius:999px; padding:.2rem .6rem; font-size:.75rem;">${mcqState.questions.length} Qs</span>
+              </div>
+              <button id="mcqBackBtn" class="ripple inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-semibold hover:bg-[var(--brand-soft)] transition" style="border-color:var(--outline);">
+                <span class="material-symbols-rounded text-[16px]">arrow_back</span> Back to Notes
+              </button>
+            </div>
+            <div style="height:8px; border-radius:999px; overflow:hidden; border:1px solid var(--outline); background:color-mix(in oklab, var(--surface) 70%, transparent); margin-bottom:1.25rem;">
+              <div id="mcqProgressBar" style="height:100%; width:0%; background:linear-gradient(90deg, #9E4B8A, #4C2A59); transition:width .25s ease;"></div>
+            </div>
+            <div id="mcqQuizBox"></div>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
+              <button id="mcqPrevBtn" class="ripple px-4 py-2 rounded-xl border text-sm font-semibold hover:bg-[var(--brand-soft)] transition" style="border-color:var(--outline);">◀ Prev</button>
+              <span id="mcqCounter" style="font-size:.85rem;">1 / ${mcqState.questions.length}</span>
+              <button id="mcqNextBtn" class="ripple px-4 py-2 rounded-xl text-sm font-semibold text-white transition" style="background:linear-gradient(135deg, var(--brand), var(--brand-strong, #4C2A59)); box-shadow:0 8px 24px rgba(158,75,138,.3); border:none;">Next ▶</button>
+            </div>
+            <div id="mcqResultBox" style="display:none; margin-top:1.5rem;"></div>
+          </div>`;
+
+        document.getElementById('mcqBackBtn').addEventListener('click', () => { $output.innerHTML = savedHTML; });
+        document.getElementById('mcqPrevBtn').addEventListener('click', () => gotoMCQ(mcqState.idx - 1));
+        document.getElementById('mcqNextBtn').addEventListener('click', () => {
+          if (mcqState.idx >= mcqState.questions.length - 1) showMCQResult();
+          else gotoMCQ(mcqState.idx + 1);
+        });
+      }
+
+      function updateMCQProgress() {
+        const total = mcqState.questions.length || 1;
+        const pct = Math.max(0, Math.min(100, (mcqState.idx / total) * 100));
+        const bar = document.getElementById('mcqProgressBar');
+        const counter = document.getElementById('mcqCounter');
+        if (bar) bar.style.width = pct + '%';
+        if (counter) counter.textContent = `${Math.min(mcqState.idx + 1, total)} / ${total}`;
+      }
+
+      function renderMCQQuestion() {
+        const q = mcqState.questions[mcqState.idx];
+        if (!q) return;
+        const box = document.getElementById('mcqQuizBox');
+        if (!box) return;
+
+        box.innerHTML = `
+          <div style="border:1px solid var(--outline); border-radius:1rem; padding:1.25rem; background:color-mix(in oklab, var(--surface) 85%, transparent);">
+            <div style="display:flex; align-items:center; gap:.5rem; font-size:.75rem; color:var(--muted); margin-bottom:.5rem;">
+              <span style="border:1px solid var(--outline); border-radius:999px; padding:.15rem .5rem;">Q${mcqState.idx + 1}</span>
+            </div>
+            <h3 style="font-size:1.05rem; font-weight:600; margin:0 0 .75rem;">${q.question}</h3>
+            <div id="mcqOptions" style="display:grid; gap:.5rem;"></div>
+            <div id="mcqExplainBox" style="display:none; border:1px solid var(--outline); border-radius:.75rem; background:color-mix(in oklab, var(--surface) 88%, transparent); padding:.75rem; margin-top:.75rem; font-size:.85rem;"></div>
+          </div>`;
+
+        const optContainer = document.getElementById('mcqOptions');
+        q.options.forEach((opt, i) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.style.cssText = 'border:1px solid var(--outline); border-radius:.75rem; padding:.7rem .85rem; cursor:pointer; text-align:left; transition:background .15s ease, border-color .15s ease; background:transparent; color:inherit; font-size:.9rem;';
+          btn.innerHTML = `<span style="border:1px solid var(--outline); border-radius:999px; padding:.12rem .45rem; margin-right:.5rem; font-size:.75rem; font-weight:600;">${String.fromCharCode(65 + i)}</span>${opt}`;
+          btn.addEventListener('mouseenter', () => { if (!mcqState.touched.has(mcqState.idx)) btn.style.background = 'var(--brand-soft)'; });
+          btn.addEventListener('mouseleave', () => { if (!mcqState.touched.has(mcqState.idx)) btn.style.background = 'transparent'; });
+          btn.addEventListener('click', () => handleMCQAnswer(i, btn));
+          optContainer.appendChild(btn);
+        });
+
+        // Restore state if already answered
+        if (mcqState.touched.has(mcqState.idx)) {
+          const opts = optContainer.querySelectorAll('button');
+          opts.forEach(o => o.style.pointerEvents = 'none');
+          const sel = mcqState.selections[mcqState.idx];
+          if (typeof sel === 'number') {
+            if (sel === q.correct_index) {
+              opts[sel].style.borderColor = 'rgba(16,185,129,.65)';
+              opts[sel].style.background = 'rgba(16,185,129,.22)';
+            } else {
+              opts[sel].style.borderColor = 'rgba(239,68,68,.60)';
+              opts[sel].style.background = 'rgba(239,68,68,.18)';
+              opts[q.correct_index].style.borderColor = 'rgba(16,185,129,.65)';
+              opts[q.correct_index].style.background = 'rgba(16,185,129,.22)';
+              const explBox = document.getElementById('mcqExplainBox');
+              if (explBox) {
+                explBox.innerHTML = `<strong>Answer:</strong> ${q.options[q.correct_index]}<br/><span>${q.explanation || 'Based on the note content.'}</span>`;
+                explBox.style.display = 'block';
+              }
+            }
+          }
+        }
+
+        updateMCQProgress();
+      }
+
+      function handleMCQAnswer(idx, btn) {
+        if (mcqState.touched.has(mcqState.idx)) return;
+        mcqState.touched.add(mcqState.idx);
+        const q = mcqState.questions[mcqState.idx];
+        const opts = document.querySelectorAll('#mcqOptions button');
+        opts.forEach(o => o.style.pointerEvents = 'none');
+
+        if (idx === q.correct_index) {
+          btn.style.borderColor = 'rgba(16,185,129,.65)';
+          btn.style.background = 'rgba(16,185,129,.22)';
+          mcqState.score += 1;
+          snack('✓ Correct!');
+        } else {
+          btn.style.borderColor = 'rgba(239,68,68,.60)';
+          btn.style.background = 'rgba(239,68,68,.18)';
+          const correctBtn = opts[q.correct_index];
+          if (correctBtn) {
+            correctBtn.style.borderColor = 'rgba(16,185,129,.65)';
+            correctBtn.style.background = 'rgba(16,185,129,.22)';
+          }
+          const explBox = document.getElementById('mcqExplainBox');
+          if (explBox) {
+            explBox.innerHTML = `<strong>Answer:</strong> ${q.options[q.correct_index]}<br/><span>${q.explanation || 'Based on the note content.'}</span>`;
+            explBox.style.display = 'block';
+          }
+        }
+        mcqState.selections[mcqState.idx] = idx;
+      }
+
+      function gotoMCQ(i) {
+        const total = mcqState.questions.length;
+        if (!total) return;
+        mcqState.idx = Math.max(0, Math.min(i, total - 1));
+        renderMCQQuestion();
+      }
+
+      function showMCQResult() {
+        const resultBox = document.getElementById('mcqResultBox');
+        if (!resultBox) return;
+        resultBox.style.display = 'block';
+
+        const total = mcqState.questions.length;
+        const pct = Math.round((mcqState.score / total) * 100);
+        const emoji = pct >= 80 ? '🎉' : pct >= 50 ? '👍' : '📚';
+
+        let reviewHTML = '';
+        mcqState.questions.forEach((q, i) => {
+          const sel = mcqState.selections[i];
+          const isCorrect = typeof sel === 'number' && sel === q.correct_index;
+          const borderColor = isCorrect ? 'rgba(16,185,129,.65)' : 'rgba(239,68,68,.60)';
+          const bgColor = isCorrect ? 'rgba(16,185,129,.08)' : 'rgba(239,68,68,.08)';
+          reviewHTML += `
+            <div style="border:1px solid var(--outline); border-radius:.75rem; padding:.85rem; border-left:3px solid ${borderColor}; background:${bgColor};">
+              <div style="font-size:.75rem; color:var(--muted); margin-bottom:.25rem;">Q${i + 1}</div>
+              <div style="font-weight:600; font-size:.9rem; margin-bottom:.35rem;">${q.question}</div>
+              <div style="font-size:.82rem;"><strong>Your answer:</strong> ${typeof sel === 'number' ? q.options[sel] : '—'}</div>
+              <div style="font-size:.82rem; color:rgba(16,185,129,.9);"><strong>Correct:</strong> ${q.options[q.correct_index]}</div>
+              ${q.explanation ? `<div style="font-size:.8rem; color:var(--muted); margin-top:.25rem;"><strong>Why:</strong> ${q.explanation}</div>` : ''}
+            </div>`;
+        });
+
+        resultBox.innerHTML = `
+          <div style="border:1px solid var(--outline); border-radius:1rem; padding:1.25rem; background:color-mix(in oklab, var(--surface) 85%, transparent);">
+            <h3 style="font-size:1.15rem; font-weight:700; margin:0 0 .25rem;">${emoji} Your Results</h3>
+            <p style="font-size:.9rem; margin:0 0 .75rem;">You scored <strong>${mcqState.score} / ${total}</strong> (${pct}%)</p>
+            <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1rem;">
+              <button id="mcqRetakeBtn" class="ripple px-4 py-2 rounded-xl border text-sm font-semibold hover:bg-[var(--brand-soft)] transition" style="border-color:var(--outline);">🔄 Retake</button>
+              <button id="mcqShuffleBtn" class="ripple px-4 py-2 rounded-xl border text-sm font-semibold hover:bg-[var(--brand-soft)] transition" style="border-color:var(--outline);">🔀 Shuffle</button>
+            </div>
+            <div style="display:grid; gap:.5rem;">${reviewHTML}</div>
+          </div>`;
+
+        document.getElementById('mcqRetakeBtn')?.addEventListener('click', () => {
+          mcqState.idx = 0; mcqState.score = 0; mcqState.touched.clear();
+          mcqState.selections = new Array(total).fill(null);
+          resultBox.style.display = 'none';
+          renderMCQQuestion();
+        });
+        document.getElementById('mcqShuffleBtn')?.addEventListener('click', () => {
+          for (let i = mcqState.questions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [mcqState.questions[i], mcqState.questions[j]] = [mcqState.questions[j], mcqState.questions[i]];
+          }
+          mcqState.idx = 0; mcqState.score = 0; mcqState.touched.clear();
+          mcqState.selections = new Array(total).fill(null);
+          resultBox.style.display = 'none';
+          renderMCQQuestion();
+        });
+
+        // Update progress bar to 100%
+        const bar = document.getElementById('mcqProgressBar');
+        if (bar) bar.style.width = '100%';
+      }
+    }
+
+    resetFlashcardAccess();
+    resetMCQAccess();
+
+    // ===== User auth token helper =====
+    function getAuthToken() {
+      const keys = ['teacherToken', 'px_token', 'userToken', 'sb-access-token', 'supabase.auth.token'];
+      for (const k of keys) {
+        try {
+          const v = localStorage.getItem(k);
+          if (v) return v;
+        } catch { /* ignore */ }
+      }
+      return '';
+    }
+
+    // ===== Role-gated actions (admin / employee only) =====
+    (function () {
+      const privilegedEls = [
+        (typeof $regen !== 'undefined' ? $regen : null),
+        (typeof $regenMobile !== 'undefined' ? $regenMobile : null),
+        (typeof $editToggle !== 'undefined' ? $editToggle : null),
+        (typeof $download !== 'undefined' ? $download : null),
+        document.getElementById('geminiSelectionEdit'),
+        document.getElementById('feedbackInboxLink'),
+        document.getElementById('adminRegenBtn')
+      ].filter(Boolean);
+
+      function setPrivilegedVisible(visible) {
+        privilegedEls.forEach(el => {
+          // Use a dedicated class so we don't override Tailwind responsive intent
+          // (e.g., Edit/Download are still hidden on mobile via `hidden sm:inline-flex`).
+          el.classList.toggle('px-privilege-hidden', !visible);
+          if (!visible) {
+            el.setAttribute('aria-hidden', 'true');
+          } else {
+            el.removeAttribute('aria-hidden');
+          }
+        });
+      }
+
+      // Default to hidden until role is verified.
+      setPrivilegedVisible(false);
+
+      (async function () {
+        try {
+          const token = getAuthToken();
+          if (!token) return;
+          const res = await fetch(`${apiBase}/api/admin/roles/me`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!res.ok) return;
+          const data = await res.json().catch(() => ({}));
+          const primaryRole = String(data?.role || data?.user_role || data?.userRole || '').toLowerCase().trim();
+          const rolesArr = Array.isArray(data?.roles) ? data.roles.map(r => String(r || '').toLowerCase().trim()) : [];
+          const isAdmin = primaryRole === 'admin' || rolesArr.includes('admin') || data?.is_admin === true;
+          const isEmployee = primaryRole === 'employee' || rolesArr.includes('employee') || data?.is_employee === true;
+          if (isAdmin || isEmployee) {
+            setPrivilegedVisible(true);
+          }
+        } catch (_) {
+          // Keep privileged buttons hidden on any failure
+        }
+      })();
+    })();
+
+    // ===== My note visibility and loading =====
+    async function checkMyNoteVisibility() {
+      if (!$myNoteBtn) return;
+      const token = getAuthToken();
+      if (!token) { $myNoteBtn.classList.add('hidden'); return; }
+      const title = (document.querySelector('#output h1')?.textContent || ($topic ? $topic.value : '') || '').trim();
+      if (!title) { $myNoteBtn.classList.add('hidden'); return; }
+      try {
+        const url = `${apiBase}/api/notes/edited/check?title=${encodeURIComponent(title)}&variant=${encodeURIComponent(currentVariant)}`;
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) { $myNoteBtn.classList.add('hidden'); return; }
+        const data = await res.json().catch(() => ({}));
+        if (data && data.exists) { $myNoteBtn.classList.remove('hidden'); }
+        else { $myNoteBtn.classList.add('hidden'); }
+      } catch { $myNoteBtn.classList.add('hidden'); }
+    }
+
+    // ===== Inline Gemini selection assistant =====
+    (function () {
+      if (!$output) return;
+      const btn = document.getElementById('geminiSelectionBtn');
+      const panel = document.getElementById('geminiSelectionPanel');
+      const closeBtn = document.getElementById('geminiSelectionClose');
+      const promptInput = document.getElementById('geminiSelectionInput');
+      const runBtn = document.getElementById('geminiSelectionRun');
+      const meaningBtn = document.getElementById('geminiSelectionMeaning');
+      const editBtn = document.getElementById('geminiSelectionEdit');
+      const statusBox = document.getElementById('geminiSelectionStatus');
+      const contextBox = document.getElementById('geminiSelectionContext');
+      const outputBox = document.getElementById('geminiSelectionOutput');
+      if (!btn || !panel || !runBtn || !contextBox || !outputBox) return;
+
+      const endpoint = `${apiBase}/api/notes/snippet-assist`;
+      const MAX_SELECTION_PAYLOAD = 2800;
+      const PREVIEW_MAX = 420;
+      let selectionText = '';
+      let selectionRect = null;
+      let selectionEndRect = null;
+      let selectionAnchorNode = null;
+      let selectionFocusNode = null;
+      let panelPinned = false;
+      let busy = false;
+
+      function withinOutput(node) {
+        if (!node) return false;
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+        return node ? $output.contains(node) : false;
+      }
+
+      function hideBtn() {
+        btn.classList.add('hidden');
+      }
+
+      function resetStatus() {
+        if (statusBox) {
+          statusBox.textContent = '';
+          statusBox.classList.add('hidden');
+          delete statusBox.dataset.error;
+          statusBox.style.color = 'var(--muted)';
+        }
+      }
+
+      function setStatus(msg, isError = false) {
+        if (!statusBox) return;
+        if (!msg) {
+          resetStatus();
+          return;
+        }
+        statusBox.textContent = msg;
+        statusBox.style.color = isError ? '#ef4444' : 'var(--muted)';
+        statusBox.dataset.error = isError ? '1' : '';
+        statusBox.classList.remove('hidden');
+      }
+
+      function setBusy(state) {
+        busy = state;
+        runBtn.disabled = state;
+        runBtn.classList.toggle('opacity-60', state);
+        if (state) {
+          setStatus('Asking TuneAI…', false);
+        } else if (!statusBox?.dataset.error) {
+          resetStatus();
+        }
+      }
+
+      function captureRect(range) {
+        if (!range) return null;
+        const rect = range.getBoundingClientRect();
+        if (!rect || (!rect.width && !rect.height)) return null;
+        return {
+          top: rect.top + window.scrollY,
+          left: rect.left + window.scrollX,
+          right: rect.right + window.scrollX,
+          bottom: rect.bottom + window.scrollY,
+          width: rect.width || 0,
+        };
+      }
+
+      function positionBtn(rect) {
+        if (!rect) return;
+        const viewportWidth = document.documentElement.clientWidth;
+        const viewportHeight = window.innerHeight;
+        const anchorX = (typeof rect.right === 'number' && rect.right) ? rect.right : (rect.left + (rect.width || 0));
+        const btnWidth = 32;
+        const left = Math.min(
+          Math.max(anchorX - btnWidth / 2, window.scrollX + 12),
+          window.scrollX + viewportWidth - btnWidth - 12
+        );
+        const anchorY = (typeof rect.bottom === 'number' && rect.bottom) ? rect.bottom : rect.top;
+        const top = Math.min(
+          Math.max(anchorY + 6, window.scrollY + 12),
+          window.scrollY + viewportHeight - 48
+        );
+        btn.style.left = `${left}px`;
+        btn.style.top = `${top}px`;
+        btn.classList.remove('hidden');
+      }
+
+      function positionPanel() {
+        const viewportWidth = document.documentElement.clientWidth;
+        const viewportHeight = window.innerHeight;
+        const panelWidth = panel.offsetWidth || Math.min(420, viewportWidth - 32);
+        let left = selectionRect ? selectionRect.left : (window.scrollX + (viewportWidth - panelWidth) / 2);
+        let top = selectionRect ? selectionRect.bottom + 12 : (window.scrollY + 80);
+        left = Math.min(Math.max(window.scrollX + 16, left), window.scrollX + viewportWidth - panelWidth - 16);
+        const maxTop = window.scrollY + viewportHeight - panel.offsetHeight - 16;
+        top = Math.min(Math.max(window.scrollY + 16, top), Number.isFinite(maxTop) ? maxTop : top);
+        panel.style.left = `${left}px`;
+        panel.style.top = `${top}px`;
+      }
+
+      function hidePanel() {
+        panelPinned = false;
+        panel.classList.add('hidden');
+        panel.setAttribute('aria-hidden', 'true');
+        resetStatus();
+      }
+
+      function updateContextPreview() {
+        if (!contextBox) return;
+        if (!selectionText) {
+          contextBox.textContent = 'Select text in the Final Output to get inline Gemini help.';
+          return;
+        }
+        const preview = selectionText.slice(0, PREVIEW_MAX);
+        contextBox.textContent = preview + (selectionText.length > PREVIEW_MAX ? '…' : '');
+      }
+
+      function handleSelectionChange() {
+        if (panelPinned) return;
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed) {
+          selectionText = '';
+          selectionRect = null;
+          selectionEndRect = null;
+          selectionAnchorNode = null;
+          selectionFocusNode = null;
+          hideBtn();
+          return;
+        }
+        if (!withinOutput(sel.anchorNode) || !withinOutput(sel.focusNode)) {
+          selectionText = '';
+          selectionRect = null;
+          selectionEndRect = null;
+          selectionAnchorNode = null;
+          selectionFocusNode = null;
+          hideBtn();
+          return;
+        }
+        const text = sel.toString().trim();
+        if (!text) {
+          selectionText = '';
+          selectionRect = null;
+          selectionEndRect = null;
+          selectionAnchorNode = null;
+          selectionFocusNode = null;
+          hideBtn();
+          return;
+        }
+        selectionText = text.replace(/\s+/g, ' ').trim();
+        selectionAnchorNode = sel.anchorNode;
+        selectionFocusNode = sel.focusNode;
+        const range = sel.getRangeAt(sel.rangeCount - 1);
+        const rect = captureRect(range);
+        const endClone = range.cloneRange();
+        endClone.collapse(false);
+        const endRect = captureRect(endClone);
+        if (!rect) {
+          selectionRect = null;
+          selectionEndRect = null;
+          hideBtn();
+          return;
+        }
+        selectionRect = rect;
+        selectionEndRect = endRect || rect;
+        updateContextPreview();
+        positionBtn(selectionEndRect);
+      }
+
+      async function runGemini() {
+        if (!selectionText || !selectionRect) {
+          snack('Select some text in the Final Output first');
+          return;
+        }
+        if (busy) return;
+        const instruction = (promptInput?.value || '').trim() || 'Explain the highlighted text simply.';
+        const payloadSelection = selectionText.slice(0, MAX_SELECTION_PAYLOAD);
+        setBusy(true);
+        outputBox.innerHTML = '';
+        try {
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ selection: payloadSelection, instruction })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = (data && (data.detail || data.error)) || `HTTP ${res.status}`;
+            throw new Error(detail);
+          }
+          const text = (data && data.text) ? String(data.text) : '';
+          if (!text) {
+            setStatus('Gemini returned an empty reply', true);
+            outputBox.textContent = '';
+            return;
+          }
+          try {
+            await ensureMarkdownRuntime();
+            outputBox.innerHTML = marked.parse(text);
+          } catch (err) {
+            console.warn('Gemini inline render fallback', err);
+            outputBox.textContent = text;
+          }
+
+          // Track Note Generation
+          if (window.Analytics) {
+            window.Analytics.track('note_viewed', {
+              variant: 'generated',
+              prompt: instruction.slice(0, 50)
+            });
+          }
+
+          resetStatus();
+        } catch (error) {
+          console.error('Gemini inline assist error', error);
+          setStatus(error?.message || 'Gemini request failed', true);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      async function runMeaning() {
+        if (!selectionText || !selectionRect) {
+          snack('Select a term or phrase');
+          return;
+        }
+        if (busy) return;
+        const instruction = `Give a very short dictionary-like meaning for: "${selectionText}" (1–2 lines). No examples.`;
+        const payloadSelection = selectionText.slice(0, MAX_SELECTION_PAYLOAD);
+        setBusy(true);
+        outputBox.innerHTML = '';
+        try {
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ selection: payloadSelection, instruction })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = (data && (data.detail || data.error)) || `HTTP ${res.status}`;
+            throw new Error(detail);
+          }
+          const text = (data && data.text) ? String(data.text) : '';
+          if (!text) {
+            setStatus('No meaning available', true);
+            outputBox.textContent = '';
+            return;
+          }
+          try {
+            await ensureMarkdownRuntime();
+            outputBox.innerHTML = marked.parse(text);
+          } catch {
+            outputBox.textContent = text;
+          }
+          // Ensure panel is visible/pinned near selection
+          panelPinned = true;
+          panel.classList.remove('hidden');
+          panel.setAttribute('aria-hidden', 'false');
+          updateContextPreview();
+          requestAnimationFrame(positionPanel);
+          resetStatus();
+        } catch (error) {
+          console.warn('Meaning error', error);
+          setStatus(error?.message || 'Meaning failed', true);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      function openPanel() {
+        if (!selectionText) {
+          snack('Select some text in the Final Output first');
+          panelPinned = false;
+          return;
+        }
+        panelPinned = true;
+        btn.classList.add('hidden');
+        panel.classList.remove('hidden');
+        panel.setAttribute('aria-hidden', 'false');
+        updateContextPreview();
+        resetStatus();
+        outputBox.innerHTML = '';
+        if (promptInput) {
+          promptInput.value = promptInput.value.trim() ? promptInput.value : 'Explain it simply';
+        }
+        requestAnimationFrame(() => {
+          positionPanel();
+          promptInput?.focus();
+        });
+      }
+
+      btn.addEventListener('click', openPanel);
+      runBtn.addEventListener('click', runGemini);
+      promptInput?.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+          e.preventDefault();
+          runGemini();
+        }
+      });
+      closeBtn?.addEventListener('click', hidePanel);
+
+      document.addEventListener('selectionchange', () => {
+        if (!panelPinned) handleSelectionChange();
+      });
+      window.addEventListener('scroll', () => {
+        if (!panelPinned) hideBtn();
+      }, { passive: true });
+      window.addEventListener('resize', () => {
+        if (panelPinned) {
+          requestAnimationFrame(positionPanel);
+        } else {
+          hideBtn();
+        }
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !panel.classList.contains('hidden')) {
+          hidePanel();
+        }
+      });
+      document.addEventListener('click', (e) => {
+        if (panel.classList.contains('hidden')) return;
+        const target = e.target;
+        if (panel.contains(target) || btn.contains(target)) return;
+        if (withinOutput(target)) return;
+        hidePanel();
+      });
+
+      updateContextPreview();
+
+      // Inline panel actions: Meaning and Edit
+      meaningBtn?.addEventListener('click', runMeaning);
+      function findClosestHeadingInOutput(node) {
+        if (!node) return null;
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+        let cur = node;
+        while (cur && cur !== $output) {
+          if (/^H[1-3]$/.test(cur.nodeName)) {
+            const level = cur.nodeName === 'H1' ? 1 : (cur.nodeName === 'H2' ? 2 : 3);
+            const title = (cur.textContent || '').trim();
+            return { level, title };
+          }
+          cur = cur.previousSibling || cur.parentNode;
+        }
+        // fallback: search previous headings
+        const hs = Array.from($output.querySelectorAll('h1,h2,h3'));
+        let last = null;
+        for (const h of hs) { if (h.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) break; last = h; }
+        if (last) {
+          const level = last.nodeName === 'H1' ? 1 : (last.nodeName === 'H2' ? 2 : 3);
+          return { level, title: (last.textContent || '').trim() };
+        }
+        return null;
+      }
+
+      function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+      function sliceSectionFromMarkdown(md, heading, level) {
+        const lines = md.split(/\n/);
+        const needle = `${'#'.repeat(level)} ${heading}`;
+        const startRe = new RegExp(`^${escapeRegex(needle)}\s*$`, 'i');
+        let start = -1;
+        for (let i = 0; i < lines.length; i++) { if (startRe.test(lines[i])) { start = i; break; } }
+        if (start === -1) return null;
+        const stopRe = new RegExp(`^#{1,${level}}\s+`); // next same or higher heading
+        let end = lines.length;
+        for (let i = start + 1; i < lines.length; i++) { if (stopRe.test(lines[i])) { end = i; break; } }
+        const before = lines.slice(0, start).join('\n');
+        const section = lines.slice(start, end).join('\n');
+        const after = lines.slice(end).join('\n');
+        return { before, section, after };
+      }
+
+      // --- Inline selection mapping helpers (DOM selection -> markdown substring) ---
+      function _normalizeForMatch(s) { return (s || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
+
+      function _buildNormalizedMap(src) {
+        const map = [];
+        let norm = '';
+        let lastSpace = false;
+        for (let i = 0; i < src.length; i++) {
+          const ch = src[i];
+          if (/\s/.test(ch)) {
+            if (!lastSpace) { norm += ' '; map.push(i); lastSpace = true; }
+          } else { norm += ch.toLowerCase(); map.push(i); lastSpace = false; }
+        }
+        let a = 0; while (a < norm.length && norm[a] === ' ') a++;
+        let b = norm.length; while (b > a && norm[b - 1] === ' ') b--;
+        return { norm: norm.slice(a, b), map: map.slice(a, b) };
+      }
+
+      function findSelectionInMarkdownSection(sectionMd, selectionTxt) {
+        if (!selectionTxt) return null;
+        // 1. Direct substring
+        let direct = sectionMd.indexOf(selectionTxt);
+        if (direct !== -1) return { start: direct, end: direct + selectionTxt.length };
+        // 2. Normalized substring
+        const { norm, map } = _buildNormalizedMap(sectionMd);
+        const sel = _normalizeForMatch(selectionTxt);
+        let idx = norm.indexOf(sel);
+        if (idx !== -1) {
+          const start = map[idx];
+          const end = map[Math.min(idx + sel.length - 1, map.length - 1)] + 1;
+          return { start, end };
+        }
+        // 3. Try joining lines in selection (for multi-line or list selections)
+        const selFlat = _normalizeForMatch(selectionTxt.replace(/\n+/g, ' '));
+        idx = norm.indexOf(selFlat);
+        if (idx !== -1) {
+          const start = map[idx];
+          const end = map[Math.min(idx + selFlat.length - 1, map.length - 1)] + 1;
+          return { start, end };
+        }
+        // 4. Fuzzy: try to find the largest matching substring (at least 10 chars)
+        for (let len = Math.min(sel.length, 60); len >= 10; len--) {
+          for (let i = 0; i <= sel.length - len; i++) {
+            const sub = sel.slice(i, i + len);
+            const subIdx = norm.indexOf(sub);
+            if (subIdx !== -1) {
+              const start = map[subIdx];
+              const end = map[Math.min(subIdx + len - 1, map.length - 1)] + 1;
+              return { start, end, partial: true };
+            }
+          }
+        }
+        return null;
+      }
+
+      function isWithinCodeOrPre(node) {
+        if (!node) return false;
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+        const pre = node.closest ? node.closest('pre, code') : null;
+        return !!pre;
+      }
+
+      async function persistMyNote(fullMarkdown) {
+        const token = getAuthToken();
+        if (!token) return false;
+        const title = (document.querySelector('#output h1')?.textContent || $topic.value || 'Untitled').trim();
+        if (!title) return false;
+        try {
+          const res = await fetch(`${apiBase}/api/notes/edited?variant=${encodeURIComponent(currentVariant)}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ title, markdown: fullMarkdown })
+          });
+          if (!res.ok) return false;
+          return true;
+        } catch { return false; }
+      }
+
+      editBtn?.addEventListener('click', async () => {
+        const anchor = selectionAnchorNode;
+        const focus = selectionFocusNode;
+        if (!selectionText || (!anchor && !focus)) { snack('Select text to edit'); return; }
+        if (isWithinCodeOrPre(anchor) || isWithinCodeOrPre(focus)) { snack('Inline edit works on regular text (not code blocks)'); return; }
+        const head = findClosestHeadingInOutput(anchor) || findClosestHeadingInOutput(focus);
+        if (!head || head.level === 1) { snack('Place cursor inside a section (H2/H3)'); return; }
+        const found = sliceSectionFromMarkdown(lastMarkdown || '', head.title, head.level);
+        if (!found || !found.section) { snack('Could not locate section in markdown'); return; }
+        const match = findSelectionInMarkdownSection(found.section, selectionText);
+        let selectedMd, replaceStart, replaceEnd, partial = false;
+        if (match) {
+          selectedMd = found.section.slice(match.start, match.end);
+          replaceStart = match.start;
+          replaceEnd = match.end;
+          partial = !!match.partial;
+        } else {
+          // Fallback: try to find the paragraph or list item containing the selection
+          const paras = found.section.split(/\n{2,}/);
+          let paraIdx = -1;
+          for (let i = 0; i < paras.length; i++) {
+            if (_normalizeForMatch(paras[i]).includes(_normalizeForMatch(selectionText))) { paraIdx = i; break; }
+          }
+          if (paraIdx !== -1) {
+            let offset = 0;
+            for (let j = 0; j < paraIdx; j++) offset += paras[j].length + 2;
+            selectedMd = paras[paraIdx];
+            replaceStart = offset;
+            replaceEnd = offset + paras[paraIdx].length;
+            partial = true;
+          } else {
+            snack('Could not map selection to markdown. Try a shorter or more precise phrase.');
+            return;
+          }
+        }
+        const instruction = (promptInput?.value || '').trim() || (partial ? 'edit this part for clarity' : 'simplify the selected text with clearer language');
+        try {
+          setStatus('Processing…'); setBusy(true);
+          const res = await fetch(`${apiBase}/api/notes/transform`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: 'custom', markdown: selectedMd, prompt: instruction })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error((data && (data.detail || data.error)) || 'Transform failed');
+          const replacement = (data && data.markdown) ? String(data.markdown) : '';
+          if (!replacement) { snack('No change'); return; }
+          const updatedSection = found.section.slice(0, replaceStart) + replacement + found.section.slice(replaceEnd);
+          const merged = [found.before, updatedSection, found.after].filter(Boolean).join('\n');
+          lastMarkdown = merged;
+          if ($editor && !$editor.classList.contains('hidden')) { $editor.value = merged; }
+          renderMarkdown(merged);
+          const ok = await persistMyNote(merged);
+          if (ok) { snack('Edited and saved to My note'); checkMyNoteVisibility(); } else { snack('Edited (not saved — sign in to save)'); }
+        } catch (e) { console.warn('Edit selection error', e); snack('Edit failed'); }
+        finally { setBusy(false); resetStatus(); }
+      });
+    })();
+
+    function getChannelLogoAsync(channelPage) {
+      if (!channelPage) return Promise.resolve('');
+      const cached = channelLogoCache.get(channelPage);
+      if (cached !== undefined) {
+        return cached instanceof Promise ? cached : Promise.resolve(cached);
+      }
+      const request = (async () => {
+        try {
+          const res = await fetch(`${apiBase}/api/youtube/channel-logo?channel_url=${encodeURIComponent(channelPage)}`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          const logo = typeof data.logo === 'string' ? data.logo.trim() : '';
+          channelLogoCache.set(channelPage, logo);
+          return logo;
+        } catch (error) {
+          console.warn('Channel logo lookup failed:', error);
+          channelLogoCache.set(channelPage, '');
+          return '';
+        }
+      })();
+      channelLogoCache.set(channelPage, request);
+      return request;
+    }
+
+    function hydrateChannelLogo(img, channelPage, shouldAttempt) {
+      if (!img) return;
+      if (channelPage) {
+        img.dataset.channelPage = channelPage;
+      }
+      if (!shouldAttempt || !channelPage) {
+        return;
+      }
+      getChannelLogoAsync(channelPage)
+        .then((logo) => {
+          if (logo && img.dataset.channelPage === channelPage) {
+            img.src = logo;
+            img.dataset.logoLoaded = 'true';
+          }
+        })
+        .catch(() => { /* already logged */ });
+    }
+
+    function createRelatedVideoCard(video) {
+      const card = document.createElement('div');
+      const link = (typeof video.link === 'string' && video.link.trim()) || '';
+      const notesUrl = link ? `./youtube-notes.html?video=${encodeURIComponent(link)}` : '';
+      card.className = 'yt-card';
+      card.setAttribute('data-video-card', '1');
+
+      const thumb = document.createElement('div');
+      thumb.className = 'yt-thumb';
+      const thumbImg = document.createElement('img');
+      const videoId = typeof video.id === 'string' ? video.id.trim() : '';
+      const thumbSrc = (typeof video.thumbnail === 'string' && video.thumbnail.trim())
+        || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');
+      thumbImg.src = thumbSrc || fallbackChannelLogo;
+      thumbImg.alt = (video.title || 'YouTube video').toString();
+      thumbImg.loading = 'lazy';
+      thumbImg.decoding = 'async';
+      thumb.appendChild(thumbImg);
+      if (video.duration) {
+        const badge = document.createElement('span');
+        badge.className = 'yt-duration';
+        badge.textContent = video.duration;
+        thumb.appendChild(badge);
+      }
+      if (video.recommended) {
+        const recBadge = document.createElement('span');
+        // Solid brand background so it remains clearly visible
+        recBadge.className = 'absolute left-2 top-2 z-[1] inline-flex items-center gap-1 rounded-full bg-brand-600 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white shadow-[0_10px_26px_rgba(15,23,42,0.45)]';
+        const star = document.createElement('span');
+        star.className = 'text-[15px] leading-none';
+        star.style.color = '#FBBF24';
+        star.textContent = '\u2605';
+        const label = document.createElement('span');
+        label.textContent = 'Recommended';
+        recBadge.appendChild(star);
+        recBadge.appendChild(label);
+        thumb.appendChild(recBadge);
+      }
+      card.appendChild(thumb);
+
+      const body = document.createElement('div');
+      body.className = 'yt-body';
+
+      const titleEl = document.createElement('p');
+      titleEl.className = 'yt-title';
+      const titleText = (typeof video.title === 'string' ? video.title : '').trim() || 'Untitled video';
+      titleEl.textContent = titleText;
+      titleEl.title = titleText;
+      body.appendChild(titleEl);
+
+      const meta = document.createElement('div');
+      meta.className = 'yt-meta';
+
+      const logoImg = document.createElement('img');
+      logoImg.className = 'yt-channel-logo';
+      logoImg.src = (typeof video.channel_logo === 'string' && video.channel_logo.trim()) || fallbackChannelLogo;
+      logoImg.alt = (video.channel || 'Channel').toString();
+      logoImg.loading = 'lazy';
+      logoImg.referrerPolicy = 'no-referrer';
+      meta.appendChild(logoImg);
+
+      const channelName = document.createElement('span');
+      channelName.className = 'yt-channel-name';
+      const channelFull = (video.channel || 'YouTube').toString();
+      channelName.textContent = channelFull;
+      channelName.title = channelFull;
+      try {
+        if (window.matchMedia && window.matchMedia('(max-width: 640px)').matches) {
+          const trimmed = channelFull.trim();
+          channelName.textContent = trimmed.length > 10 ? (trimmed.slice(0, 10) + '...') : trimmed;
+        }
+      } catch { }
+      meta.appendChild(channelName);
+
+      if (video.views) {
+        const views = document.createElement('span');
+        views.className = 'yt-views';
+        views.textContent = video.views;
+        meta.appendChild(views);
+      }
+
+      body.appendChild(meta);
+      card.appendChild(body);
+
+      // Add a soft brand-colored glow for recommended videos
+      if (video.recommended) {
+        card.classList.add('shadow-[0_0_0_1px_rgba(158,75,138,0.4)]', 'shadow-neon');
+      }
+
+      const channelPage = (typeof video.channel_page === 'string' ? video.channel_page : '').trim();
+      const logoIsDefault = Boolean(video.channel_logo_is_default) || !video.channel_logo || video.channel_logo === fallbackChannelLogo;
+      hydrateChannelLogo(logoImg, channelPage, logoIsDefault && !!channelPage);
+
+      const overlay = document.createElement('div');
+      overlay.className = 'yt-hover-overlay';
+
+      const playBtn = document.createElement('button');
+      playBtn.type = 'button';
+      playBtn.className = 'yt-hover-btn yt-hover-btn-play';
+      playBtn.setAttribute('aria-label', 'Play on YouTube');
+      playBtn.title = 'Play on YouTube';
+      const playIcon = document.createElement('span');
+      playIcon.className = 'yt-hover-btn-icon';
+      playIcon.textContent = 'play_arrow';
+      playBtn.appendChild(playIcon);
+      if (!link) {
+        playBtn.disabled = true;
+        playBtn.style.opacity = '0.6';
+        playBtn.style.cursor = 'not-allowed';
+      }
+      playBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (link) {
+          window.open(link, '_blank', 'noopener');
+        }
+      });
+
+      const notesBtn = document.createElement('button');
+      notesBtn.type = 'button';
+      notesBtn.className = 'yt-hover-btn yt-hover-btn-notes';
+      notesBtn.setAttribute('aria-label', 'Open PaperX notes');
+      notesBtn.title = 'Open PaperX notes';
+      const notesIcon = document.createElement('span');
+      notesIcon.className = 'yt-hover-btn-icon';
+      notesIcon.textContent = 'description';
+      notesBtn.appendChild(notesIcon);
+      if (!notesUrl || notesUrl === '#') {
+        notesBtn.disabled = true;
+        notesBtn.style.opacity = '0.6';
+        notesBtn.style.cursor = 'not-allowed';
+      }
+      notesBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (notesUrl && notesUrl !== '#') {
+          window.open(notesUrl, '_blank', 'noopener');
+        }
+      });
+
+      overlay.appendChild(playBtn);
+      overlay.appendChild(notesBtn);
+
+      thumb.appendChild(overlay);
+      return card;
+    }
+
+    function renderRelatedVideos(videos, displayTopic, baseTopic, language) {
+      if (!$relatedVideosWrap || !$relatedVideosCarousel) return;
+      $relatedVideosCarousel.innerHTML = '';
+      const fragment = document.createDocumentFragment();
+      videos.forEach(video => fragment.appendChild(createRelatedVideoCard(video)));
+      $relatedVideosCarousel.appendChild(fragment);
+      $relatedVideosSkeleton?.classList.add('hidden');
+      $relatedVideosEmpty?.classList.add('hidden');
+      $relatedVideosWrap.classList.remove('hidden');
+      if ($relatedVideosSummary) {
+        $relatedVideosSummary.textContent = `Showing for "${displayTopic}"`;
+      }
+      // Video caching disabled — always fetch fresh results
+    }
+
+    async function loadRelatedVideos(topic, options = {}) {
+      const baseQuery = (topic || '').trim();
+      const force = Boolean(options.force);
+      const requestedLanguage = normalizeVideoLanguage(options.language ?? relatedVideosLanguage);
+      const searchQuery = buildRelatedVideosQuery(baseQuery, requestedLanguage);
+
+      if (!baseQuery) {
+        relatedVideosTopic = '';
+        relatedVideosFullQuery = '';
+        relatedVideosAbort?.abort();
+        relatedVideosAbort = null;
+        if ($relatedVideosSection) $relatedVideosSection.classList.remove('hidden');
+        if ($relatedVideosSummary) {
+          $relatedVideosSummary.textContent = 'Enter a topic to discover supporting videos.';
+        }
+        if ($relatedVideosCarousel) $relatedVideosCarousel.innerHTML = '';
+        $relatedVideosSkeleton?.classList.add('hidden');
+        if ($relatedVideosEmpty) {
+          $relatedVideosEmpty.textContent = 'Videos will appear once a topic is generated.';
+          $relatedVideosEmpty.classList.remove('hidden');
+        }
+        return;
+      }
+
+      if (!force && relatedVideosFullQuery && relatedVideosFullQuery.toLowerCase() === searchQuery.toLowerCase()) {
+        return;
+      }
+
+      relatedVideosTopic = baseQuery;
+      relatedVideosLanguage = requestedLanguage || 'English';
+      relatedVideosFullQuery = searchQuery;
+      if ($relatedVideosSection) $relatedVideosSection.classList.remove('hidden');
+      if ($relatedVideosSummary) {
+        $relatedVideosSummary.textContent = `Finding videos for "${searchQuery}"...`;
+      }
+
+
+      if (relatedVideosAbort) {
+        relatedVideosAbort.abort();
+      }
+      relatedVideosAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
+
+      const hasExisting = $relatedVideosCarousel && $relatedVideosCarousel.children.length > 0;
+      if (hasExisting && !force) {
+        $relatedVideosSkeleton?.classList.add('hidden');
+        $relatedVideosWrap?.classList.remove('hidden');
+      } else {
+        if ($relatedVideosCarousel) $relatedVideosCarousel.innerHTML = ''; // clear on fresh load
+        $relatedVideosSkeleton?.classList.remove('hidden');
+        $relatedVideosWrap?.classList.add('hidden');
+      }
+      $relatedVideosEmpty?.classList.add('hidden');
+
+      try {
+        // First, try to fetch a syllabus-linked video_url for this topic
+        let recommended = null;
+        try {
+          const recRes = await fetch(`${apiBase}/api/syllabus/topics/by-title?topic=${encodeURIComponent(baseQuery)}`);
+          if (recRes.ok) {
+            const recData = await recRes.json();
+            if (Array.isArray(recData) && recData.length) {
+              const first = recData.find(t => typeof t.video_url === 'string' && t.video_url.trim());
+              if (first && first.video_url) {
+                const vurl = first.video_url.trim();
+                // extract YouTube id if possible
+                let vidId = '';
+                const ytMatch = vurl.match(/[?&]v=([^&#]+)/) || vurl.match(/youtu\.be\/([^?#]+)/);
+                if (ytMatch && ytMatch[1]) {
+                  vidId = ytMatch[1];
+                }
+                recommended = {
+                  id: vidId || '',
+                  link: vurl,
+                  title: (first.topic || baseQuery || '').toString(),
+                  channel: 'Syllabus recommended',
+                  channel_page: '',
+                  thumbnail: '',
+                  views: '',
+                  channel_logo: '',
+                  channel_logo_is_default: true,
+                  duration: '',
+                  recommended: true,
+                };
+
+                // Attempt to hydrate channel metadata from backend so logo/name show like other videos
+                try {
+                  const metaRes = await fetch(`${apiBase}/api/transcripts/meta`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: vurl }),
+                  });
+                  if (metaRes.ok) {
+                    const meta = await metaRes.json();
+                    if (meta && typeof meta === 'object') {
+                      if (meta.channel_name) {
+                        recommended.channel = meta.channel_name;
+                      }
+                      if (meta.channel_logo) {
+                        recommended.channel_logo = meta.channel_logo;
+                        recommended.channel_logo_is_default = false;
+                      }
+                      if (meta.channel_url) {
+                        recommended.channel_page = meta.channel_url;
+                      }
+                    }
+                  }
+                } catch (metaErr) {
+                  console.warn('Recommended video metadata lookup failed:', metaErr);
+                }
+
+                // Fallback to YouTube oEmbed for channel name + URL if backend metadata unavailable
+                if (!recommended.channel_page || recommended.channel === 'Syllabus recommended') {
+                  try {
+                    const oembedRes = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(vurl)}`);
+                    if (oembedRes.ok) {
+                      const oembed = await oembedRes.json();
+                      if (oembed && typeof oembed === 'object') {
+                        if (oembed.author_name) {
+                          recommended.channel = oembed.author_name;
+                        }
+                        if (oembed.author_url) {
+                          recommended.channel_page = oembed.author_url;
+                        }
+                      }
+                    }
+                  } catch (oembedErr) {
+                    console.warn('YouTube oEmbed lookup failed:', oembedErr);
+                  }
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Recommended topic video lookup failed:', e);
+        }
+
+        const fetchOptions = relatedVideosAbort ? { signal: relatedVideosAbort.signal } : undefined;
+        const response = await fetch(`${apiBase}/api/youtube/search?query=${encodeURIComponent(searchQuery)}&num=8`, fetchOptions);
+        if (!response.ok) {
+          throw new Error(`Search failed with status ${response.status}`);
+        }
+        const videos = await response.json();
+        if (!Array.isArray(videos) || videos.length === 0) {
+          const hadExisting = $relatedVideosCarousel && $relatedVideosCarousel.children.length > 0;
+          if (hadExisting) {
+            $relatedVideosSkeleton?.classList.add('hidden');
+            $relatedVideosWrap?.classList.remove('hidden');
+            $relatedVideosEmpty?.classList.add('hidden');
+            if ($relatedVideosSummary) {
+              $relatedVideosSummary.textContent = `Showing saved videos for "${searchQuery}".`;
+            }
+          } else {
+            $relatedVideosSkeleton?.classList.add('hidden');
+            $relatedVideosWrap?.classList.add('hidden');
+            if ($relatedVideosEmpty) {
+              $relatedVideosEmpty.textContent = 'No related videos found. Try a more specific topic.';
+              $relatedVideosEmpty.classList.remove('hidden');
+            }
+            if ($relatedVideosSummary) {
+              $relatedVideosSummary.textContent = `No videos found for "${searchQuery}".`;
+            }
+          }
+          return;
+        }
+        const limited = videos.slice(0, 8);
+        const finalList = recommended ? [recommended, ...limited] : limited;
+        renderRelatedVideos(finalList, searchQuery, baseQuery, relatedVideosLanguage);
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+        console.error('Related videos error:', error);
+        const hadExisting = $relatedVideosCarousel && $relatedVideosCarousel.children.length > 0;
+        if (hadExisting) {
+          $relatedVideosSkeleton?.classList.add('hidden');
+          $relatedVideosWrap?.classList.remove('hidden');
+          $relatedVideosEmpty?.classList.add('hidden');
+          if ($relatedVideosSummary) {
+            $relatedVideosSummary.textContent = `Showing saved videos for "${searchQuery}".`;
+          }
+        } else {
+          $relatedVideosSkeleton?.classList.add('hidden');
+          $relatedVideosWrap?.classList.add('hidden');
+          if ($relatedVideosEmpty) {
+            $relatedVideosEmpty.textContent = 'Unable to load videos right now.';
+            $relatedVideosEmpty.classList.remove('hidden');
+          }
+          if ($relatedVideosSummary) {
+            $relatedVideosSummary.textContent = `Unable to load videos for "${searchQuery}".`;
+          }
+        }
+      } finally {
+        relatedVideosAbort = null;
+      }
+    }
+
+    // ===== State =====
+    let es = null;
+    let lastMarkdown = '';
+    let lastImageUrls = [];
+    const VARIANTS = ['detailed', 'cheatsheet'];
+    let currentVariant = 'detailed';
+    let currentCourseType = '';
+    try { localStorage.setItem('paperx:lastVariant', currentVariant); } catch { }
+    const noteKey = (v) => `paperx:lastNoteId:${v}`;
+    let currentNoteId = localStorage.getItem(noteKey(currentVariant)) || (currentVariant === 'detailed' ? (localStorage.getItem('paperx:lastNoteId') || '') : '');
+    function setVariantUI() {
+      const act = currentVariant;
+      [$variantDetailed, $variantCheatsheet].forEach(btn => {
+        if (!btn) return;
+        const v = btn.dataset.variant;
+        const on = v === act;
+        btn.classList.toggle('bg-brand-600', on);
+        btn.classList.toggle('text-white', on);
+        btn.classList.toggle('shadow-neon', on);
+        btn.classList.toggle('bg-transparent', !on);
+        btn.classList.toggle('text-inherit', !on);
+        btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+    }
+    setVariantUI();
+    function currentTopicOrHeading() {
+      const fromHeading = (document.querySelector('#output h1')?.textContent || '').trim();
+      const fromUrl = (() => {
+        try { return new URLSearchParams(window.location.search).get('topic')?.trim() || ''; }
+        catch { return ''; }
+      })();
+      return fromUrl || fromHeading || '';
+    }
+
+    [$variantDetailed, $variantCheatsheet].forEach(btn => {
+      if (!btn) return;
+      btn.addEventListener('click', async () => {
+        const v = btn.dataset.variant;
+        if (!v || !VARIANTS.includes(v)) return;
+        currentVariant = v;
+        try { localStorage.setItem('paperx:lastVariant', v); } catch { }
+        setVariantUI();
+        logEvent('Switch variant', v);
+        console.log('[Variant] switch clicked:', v);
+        checkMyNoteVisibility();
+        // If a topic is present, auto-click Generate to regenerate for the new variant
+        const t0 = ($topic?.value || '').trim();
+        if (t0) { $generate?.click(); return; }
+        // load last note for this variant if available; else try DB resolve by topic/heading
+        const lastId = localStorage.getItem(noteKey(currentVariant)) || '';
+        const t = currentTopicOrHeading();
+
+        async function tryRenderResolvedByTitle(title) {
+          const clean = (title || '').trim();
+          if (!clean) return { loaded: false, definitiveMissing: false };
+          const url = `${apiBase}/api/notes/resolve?title=${encodeURIComponent(clean)}&variant=${encodeURIComponent(currentVariant)}`;
+          const res = await fetchJsonWithRetry(url, { timeoutMs: 8000, attempts: 3 });
+          if (res.status === 200 && res.data && res.data.markdown) {
+            renderMarkdown(res.data.markdown);
+            renderImageGallery(res.data.image_urls || []);
+            currentNoteId = res.data.id || '';
+            try {
+              if (currentNoteId) localStorage.setItem(noteKey(currentVariant), currentNoteId);
+            } catch { }
+            const loadedTopic = (res.data.title || document.querySelector('#output h1')?.textContent || '').trim();
+            const $meta = document.getElementById('noteMeta');
+            if ($meta) $meta.textContent = `Loaded • ${currentNoteId || '-'} • ${currentVariant}`;
+            if (currentNoteId) {
+              enableFlashcardAccess(currentNoteId, loadedTopic);
+              enableMCQAccess(currentNoteId, loadedTopic);
+            }
+            if (loadedTopic) {
+              loadRelatedVideos(loadedTopic, { force: true });
+            }
+            return { loaded: true, definitiveMissing: false };
+          }
+          if (res.status === 404) return { loaded: false, definitiveMissing: true };
+          return { loaded: false, definitiveMissing: false };
+        }
+
+        const urlTopic = (() => {
+          try { return new URLSearchParams(window.location.search).get('topic')?.trim() || ''; }
+          catch { return ''; }
+        })();
+
+        // 1. Explicit URL Topic requested - bypass cache
+        if (urlTopic) {
+          const resolved = await tryRenderResolvedByTitle(urlTopic);
+          if (resolved.loaded) return;
+          if (resolved.definitiveMissing) {
+            console.log('[Variant] auto-generate for URL topic:', urlTopic);
+            logEvent('Auto-generate', `${currentVariant} • ${urlTopic}`);
+            startGeneration(urlTopic, true); // Force generation to bypass 'resolve' double check error
+            return;
+          }
+          snack('Unable to confirm note right now');
+          return;
+        }
+
+        // 2. No URL topic requested - try to resume last viewed note
+        if (lastId) {
+          const url = `${apiBase}/notes/${encodeURIComponent(lastId)}?variant=${encodeURIComponent(currentVariant)}`;
+          const res = await fetchJsonWithRetry(url, { timeoutMs: 8000, attempts: 3 });
+          if (res.status === 200 && res.data && res.data.markdown) {
+            renderMarkdown(res.data.markdown);
+            renderImageGallery(res.data.image_urls || []);
+            currentNoteId = res.data.id || lastId;
+            const loadedTopic = (res.data.title || document.querySelector('#output h1')?.textContent || '').trim();
+            if (currentNoteId) {
+              enableFlashcardAccess(currentNoteId, loadedTopic);
+              enableMCQAccess(currentNoteId, loadedTopic);
+            }
+            if (loadedTopic) {
+              loadRelatedVideos(loadedTopic, { force: true });
+            }
+            return;
+          }
+
+          if (res.status === 404) {
+            // Stale localStorage id; try exact DB resolve by title.
+            const resolved = await tryRenderResolvedByTitle(t);
+            if (resolved.loaded) return;
+            if (resolved.definitiveMissing) {
+              if (!t) return;
+              console.log('[Variant] auto-generate (definitive missing) for topic:', t, 'variant:', currentVariant);
+              logEvent('Auto-generate', `${currentVariant} • ${t}`);
+              startGeneration(t, false);
+              return;
+            }
+            snack('Unable to confirm saved note right now');
+            return;
+          }
+
+          // Any other error: do NOT auto-generate.
+          console.warn('[Variant] Fetch by id not definitive; skipping auto-generate', res);
+          snack('Unable to load saved note right now');
+          return;
+        }
+
+        // 3. Complete fallback: try DB resolve by title, then (only if 404) auto-generate.
+        const resolved = await tryRenderResolvedByTitle(t);
+        if (resolved.loaded) return;
+        if (resolved.definitiveMissing) {
+          if (!t) return;
+          console.log('[Variant] auto-generate (definitive missing) for topic:', t, 'variant:', currentVariant);
+          logEvent('Auto-generate', `${currentVariant} • ${t}`);
+          startGeneration(t, false);
+          return;
+        }
+        snack('Unable to confirm note in DB right now');
+      });
+    });
+    let dense = false;
+    let emphasis = localStorage.getItem('paperx:emphasis') === '1';
+
+    // Initialize degree UI removed per user request
+
+    // Clean up any leftover video cache from previous sessions
+    try {
+      localStorage.removeItem('paperx:lastVideos');
+      localStorage.removeItem('paperx:lastTopic');
+      localStorage.removeItem('paperx:lastVideoLanguage');
+    } catch { }
+
+    if ($videoLanguage) {
+      relatedVideosLanguage = $videoLanguage.value || relatedVideosLanguage;
+    }
+
+    // No cached video restoration — always start fresh
+    if ($relatedVideosSection) {
+      $relatedVideosSection.classList.remove('hidden');
+      $relatedVideosSkeleton?.classList.remove('hidden');
+      $relatedVideosWrap?.classList.add('hidden');
+    }
+
+    // ===== Chips (suggested topics) =====
+    document.querySelectorAll('.chip').forEach(ch => {
+      ch.className = "ripple px-3 py-1.5 text-xs rounded-full border hover:bg-[var(--brand-soft)]";
+      ch.style.borderColor = "var(--outline)";
+      ch.addEventListener('click', () => {
+        const value = ch.dataset.val || ch.textContent || '';
+        if ($topic) $topic.value = value;
+        loadRelatedVideos(value, { force: true });
+      });
+    });
+
+    if ($refreshVideos) {
+      $refreshVideos.addEventListener('click', () => {
+        const current = ($topic?.value || relatedVideosTopic || '').trim();
+        loadRelatedVideos(current || relatedVideosTopic, { force: true });
+      });
+    }
+
+    if ($videoLanguage) {
+      $videoLanguage.addEventListener('change', () => {
+        const selected = normalizeVideoLanguage($videoLanguage.value) || 'English';
+        if (selected.toLowerCase() === (relatedVideosLanguage || '').toLowerCase()) return;
+        relatedVideosLanguage = selected;
+        const current = ($topic?.value || relatedVideosTopic || '').trim();
+        if (current) {
+          loadRelatedVideos(current, { force: true, language: relatedVideosLanguage });
+        }
+      });
+    }
+
+    if ($flashcardBtn) {
+      $flashcardBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        openFlashcards();
+      });
+    }
+
+    if ($mcqBtn) {
+      $mcqBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        openMCQ();
+      });
+    }
+
+    if ($myNoteBtn) {
+      $myNoteBtn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        const token = getAuthToken();
+        if (!token) { snack('Sign in to use My note'); return; }
+        const title = (document.querySelector('#output h1')?.textContent || $topic?.value || '').trim();
+        if (!title) { snack('No note loaded'); return; }
+        try {
+          const url = `${apiBase}/api/notes/edited?title=${encodeURIComponent(title)}&variant=${encodeURIComponent(currentVariant)}`;
+          const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) { throw new Error((data && (data.detail || data.error)) || 'Load failed'); }
+          if (data && data.markdown) {
+            renderMarkdown(data.markdown);
+            snack('Loaded My note');
+          }
+        } catch (e) { console.warn('My note error:', e); snack('Unable to load My note'); }
+      });
+    }
+
+    // ===== MedMap (PPT Preview) =====
+    let medmapSavedMarkdown = '';
+    let medmapSavedImageUrls = [];
+    let medmapActive = false;
+
+    function buildEmbedUrl(url) {
+      const u = (url || '').trim();
+      // Google Drive / Slides / Docs links
+      if (/docs\.google\.com\/presentation/i.test(u)) {
+        // Google Slides: use /embed endpoint
+        return u.replace(/\/(edit|view)(#.*)?$/i, '/embed');
+      }
+      if (/drive\.google\.com\/file\/d\//i.test(u)) {
+        // Google Drive file: use preview
+        return u.replace(/\/view(\?.*)?$/i, '/preview');
+      }
+      if (/docs\.google\.com/i.test(u)) {
+        return u.replace(/\/(edit|view)(#.*)?$/i, '/preview');
+      }
+      // Direct PDF links
+      if (/\.pdf(\?|#|$)/i.test(u)) {
+        return u;
+      }
+      // Office Web Apps viewer for pptx/docx etc.
+      if (/\.(pptx?|docx?|xlsx?)$/i.test(u)) {
+        return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(u)}`;
+      }
+      // Google Viewer fallback for other URLs
+      return `https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(u)}`;
+    }
+
+    function exitMedmapPreview() {
+      if (!medmapActive) return;
+      medmapActive = false;
+      if (medmapSavedMarkdown) {
+        renderMarkdown(medmapSavedMarkdown);
+        renderImageGallery(medmapSavedImageUrls);
+      }
+      medmapSavedMarkdown = '';
+      medmapSavedImageUrls = [];
+    }
+
+    if ($medmapBtn) {
+      $medmapBtn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        // If already in MedMap view, exit back to notes
+        if (medmapActive) {
+          exitMedmapPreview();
+          snack('Returned to notes');
+          return;
+        }
+
+        const topic = currentTopicOrHeading();
+        if (!topic) {
+          snack('No topic loaded — generate notes first');
+          return;
+        }
+
+        // Show loading state
+        const origHTML = $medmapBtn.innerHTML;
+        $medmapBtn.innerHTML = '<span class="st-btn-icon material-symbols-rounded animate-spin">progress_activity</span><span class="st-btn-text"><span class="st-btn-label">Loading…</span></span>';
+        $medmapBtn.disabled = true;
+
+        try {
+          const res = await fetch(`${apiBase}/api/notes/ppt-link?topic=${encodeURIComponent(topic)}`);
+          const data = await res.json().catch(() => ({}));
+          const pptLink = (data && data.ppt_link) ? data.ppt_link.trim() : '';
+
+          if (!pptLink) {
+            snack('No PPT available for this topic');
+            return;
+          }
+
+          // Save current content for restoration
+          medmapSavedMarkdown = lastMarkdown || '';
+          medmapSavedImageUrls = [...lastImageUrls];
+          medmapActive = true;
+
+          const embedUrl = buildEmbedUrl(pptLink);
+
+          // Build preview UI in the output area
+          if ($output) {
+            $output.innerHTML = `
+              <div style="display:flex; flex-direction:column; gap:1rem;">
+                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.75rem;">
+                  <h2 style="margin:0; font-size:1.15rem; font-weight:700; display:flex; align-items:center; gap:.5rem;">
+                    <span class="material-symbols-rounded" style="color:var(--brand-600); font-size:1.3rem;">slideshow</span>
+                    MedMap — ${topic}
+                  </h2>
+                  <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+                    <button id="medmapBackBtn" type="button" style="display:inline-flex; align-items:center; gap:.35rem; border:1px solid var(--outline); border-radius:999px; padding:.4rem .9rem; font-size:.8rem; font-weight:600; cursor:pointer; background:transparent; color:inherit; transition:background .15s;" onmouseover="this.style.background='var(--brand-soft)'" onmouseout="this.style.background='transparent'">
+                      <span class="material-symbols-rounded" style="font-size:1rem;">arrow_back</span>
+                      Back to Notes
+                    </button>
+                    <a href="${pptLink}" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; gap:.35rem; border:1px solid var(--outline); border-radius:999px; padding:.4rem .9rem; font-size:.8rem; font-weight:600; text-decoration:none; color:inherit; transition:background .15s;" onmouseover="this.style.background='var(--brand-soft)'" onmouseout="this.style.background='transparent'">
+                      <span class="material-symbols-rounded" style="font-size:1rem;">open_in_new</span>
+                      Open
+                    </a>
+                  </div>
+                </div>
+                <div style="border:1px solid var(--outline); border-radius:1rem; overflow:hidden; background:var(--surface); min-height:500px;">
+                  <iframe src="${embedUrl}" style="width:100%; height:70vh; min-height:500px; border:none;" allowfullscreen loading="lazy"></iframe>
+                </div>
+              </div>`;
+
+            // Wire back button
+            const backBtn = document.getElementById('medmapBackBtn');
+            if (backBtn) {
+              backBtn.addEventListener('click', () => {
+                exitMedmapPreview();
+                snack('Returned to notes');
+              });
+            }
+          }
+
+          // Clear images while showing PPT
+          if ($images) $images.innerHTML = '';
+
+        } catch (err) {
+          console.error('[MedMap] Error:', err);
+          snack('Failed to load PPT preview');
+        } finally {
+          $medmapBtn.innerHTML = origHTML;
+          $medmapBtn.disabled = false;
+        }
+      });
+    }
+
+    // ===== CaseFlow (Clinical scenario + chatbot evaluation) =====
+    let caseflowSavedMarkdown = '';
+    let caseflowSavedImageUrls = [];
+    let caseflowActive = false;
+    let caseflowTopic = '';
+    let caseflowScenario = '';
+    let caseflowHistory = [];
+
+    function exitCaseFlowPreview() {
+      if (!caseflowActive) return;
+      caseflowActive = false;
+      caseflowTopic = '';
+      caseflowScenario = '';
+      caseflowHistory = [];
+      if (caseflowSavedMarkdown) {
+        renderMarkdown(caseflowSavedMarkdown);
+        renderImageGallery(caseflowSavedImageUrls);
+      }
+      caseflowSavedMarkdown = '';
+      caseflowSavedImageUrls = [];
+    }
+
+    function renderCaseFlowUI(topic, scenarioQuestion, isCached) {
+      if (!$output) return;
+      caseflowTopic = topic;
+      caseflowScenario = scenarioQuestion;
+      caseflowHistory = [];
+
+      caseflowSavedMarkdown = lastMarkdown || '';
+      caseflowSavedImageUrls = [...lastImageUrls];
+      caseflowActive = true;
+      if ($images) $images.innerHTML = '';
+
+      $output.innerHTML = `
+        <div id="caseflowRoot" style="max-width:860px; margin:0 auto; display:flex; flex-direction:column; gap:1rem;">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.75rem;">
+            <h2 style="margin:0; font-size:1.2rem; font-weight:800; display:flex; align-items:center; gap:.45rem;">
+              <span class="material-symbols-rounded" style="color:var(--brand); font-size:1.35rem;">account_tree</span>
+              CaseFlow Chat
+            </h2>
+            <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
+              <span style="border:1px solid var(--outline); border-radius:999px; padding:.3rem .7rem; font-size:.72rem; background:var(--brand-soft); color:var(--brand); font-weight:700;">${topic}</span>
+              <button id="caseflowBackBtn" type="button" style="display:inline-flex; align-items:center; gap:.35rem; border:1px solid var(--outline); border-radius:999px; padding:.45rem .95rem; font-size:.8rem; font-weight:600; cursor:pointer; background:transparent; color:inherit; transition:all .2s;" onmouseover="this.style.background='var(--brand-soft)'" onmouseout="this.style.background='transparent'">
+                <span class="material-symbols-rounded" style="font-size:1rem;">arrow_back</span>
+                Back to Notes
+              </button>
+            </div>
+          </div>
+
+          <div style="border:1px solid var(--outline); border-radius:1rem; padding:.95rem 1rem; background:color-mix(in oklab, var(--surface) 84%, transparent);">
+            <div style="display:flex; align-items:center; gap:.45rem; font-size:.74rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:700; margin-bottom:.55rem;">
+              <span class="material-symbols-rounded" style="font-size:1rem; color:var(--brand);">clinical_notes</span>
+              Clinical Case Scenario
+              ${isCached ? '<span style="margin-left:.35rem; border:1px solid var(--outline); border-radius:999px; padding:.15rem .45rem; font-size:.62rem; text-transform:none; letter-spacing:normal;">cached</span>' : ''}
+            </div>
+            <p style="margin:0; line-height:1.55; font-size:.93rem;">${scenarioQuestion}</p>
+          </div>
+
+          <div id="caseflowChatBox" style="border:1px solid var(--outline); border-radius:1rem; background:color-mix(in oklab, var(--surface) 90%, transparent); min-height:260px; max-height:460px; overflow:auto; padding:.95rem; display:flex; flex-direction:column; gap:.75rem;"></div>
+
+          <div style="border:1px solid var(--outline); border-radius:1rem; padding:.9rem; background:color-mix(in oklab, var(--surface) 92%, transparent); display:flex; flex-direction:column; gap:.65rem;">
+            <label for="caseflowAnswerInput" style="font-size:.74rem; text-transform:uppercase; letter-spacing:.06em; font-weight:700; color:var(--muted);">Justify yourself</label>
+            <textarea id="caseflowAnswerInput" rows="4" placeholder="Write your clinical justification based on this topic..." style="width:100%; border:1px solid var(--outline); border-radius:.8rem; background:var(--surface); color:var(--surface-contrast); padding:.75rem .85rem; font-size:.9rem; line-height:1.45; resize:vertical; min-height:110px;"></textarea>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:.6rem; flex-wrap:wrap;">
+              <span id="caseflowStatus" style="font-size:.78rem; color:var(--muted);"></span>
+              <button id="caseflowSendBtn" type="button" style="display:inline-flex; align-items:center; gap:.35rem; border:none; border-radius:999px; padding:.55rem 1.05rem; background:linear-gradient(135deg, var(--brand), var(--brand-strong, #4C2A59)); color:#fff; font-size:.82rem; font-weight:700; cursor:pointer; box-shadow:0 8px 24px rgba(158,75,138,.3); transition:transform .18s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">
+                <span class="material-symbols-rounded" style="font-size:1rem;">send</span>
+                Evaluate Answer
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const $chatBox = document.getElementById('caseflowChatBox');
+      const $status = document.getElementById('caseflowStatus');
+      const $input = document.getElementById('caseflowAnswerInput');
+      const $send = document.getElementById('caseflowSendBtn');
+      const $back = document.getElementById('caseflowBackBtn');
+
+      function pushBubble(role, html, meta = '') {
+        if (!$chatBox) return;
+        const wrap = document.createElement('div');
+        const isUser = role === 'user';
+        wrap.style.cssText = `display:flex; justify-content:${isUser ? 'flex-end' : 'flex-start'};`;
+        const card = document.createElement('div');
+        card.style.cssText = [
+          'max-width:86%;',
+          'border:1px solid var(--outline);',
+          'border-radius:.9rem;',
+          'padding:.7rem .8rem;',
+          `background:${isUser ? 'linear-gradient(135deg, rgba(158,75,138,.2), rgba(76,42,89,.12))' : 'color-mix(in oklab, var(--surface) 85%, transparent)'};`,
+          'font-size:.88rem;',
+          'line-height:1.45;'
+        ].join('');
+        card.innerHTML = `
+          <div style="font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; color:var(--muted); margin-bottom:.35rem;">${isUser ? 'You' : 'CaseFlow AI'}</div>
+          <div>${html}</div>
+          ${meta ? `<div style="margin-top:.45rem; font-size:.7rem; color:var(--muted);">${meta}</div>` : ''}
+        `;
+        wrap.appendChild(card);
+        $chatBox.appendChild(wrap);
+        $chatBox.scrollTop = $chatBox.scrollHeight;
+      }
+
+      pushBubble('assistant', 'Share your reasoning for the scenario above. I’ll evaluate it and coach your next improvement step.');
+
+      async function evaluateAnswer() {
+        const answer = ($input?.value || '').trim();
+        if (!answer) {
+          snack('Please write your justification first');
+          $input?.focus();
+          return;
+        }
+        if ($send) {
+          $send.disabled = true;
+          $send.style.opacity = '.65';
+        }
+        if ($status) $status.textContent = 'Evaluating your response…';
+
+        pushBubble('user', answer.replace(/\n/g, '<br/>'));
+        caseflowHistory.push({ role: 'user', content: answer });
+
+        try {
+          const res = await fetch(`${apiBase}/api/notes/caseflow/evaluate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              topic,
+              variant: currentVariant,
+              scenario_question: scenarioQuestion,
+              answer,
+              history: caseflowHistory,
+            }),
+          });
+
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = (data && (data.detail || data.error)) || `Request failed (${res.status})`;
+            throw new Error(detail);
+          }
+
+          const evaluation = (data && data.evaluation) ? data.evaluation : {};
+          const score = Number.isFinite(Number(evaluation.score)) ? Number(evaluation.score) : 0;
+          const verdict = String(evaluation.verdict || 'Needs improvement');
+          const feedback = String(evaluation.feedback || '').trim();
+          const strengths = Array.isArray(evaluation.strengths) ? evaluation.strengths : [];
+          const improve = Array.isArray(evaluation.improve) ? evaluation.improve : [];
+          const followUp = String(evaluation.follow_up_question || '').trim();
+
+          const aiHtml = `
+            <div style="display:flex; gap:.4rem; align-items:center; margin-bottom:.35rem; flex-wrap:wrap;">
+              <span style="border:1px solid var(--outline); border-radius:999px; padding:.12rem .5rem; font-size:.68rem; font-weight:700;">Score: ${Math.max(0, Math.min(score, 10))}/10</span>
+              <span style="font-size:.74rem; font-weight:700; color:var(--brand);">${verdict}</span>
+            </div>
+            ${feedback ? `<div>${feedback}</div>` : ''}
+            ${strengths.length ? `<div style="margin-top:.5rem;"><strong style="font-size:.76rem;">Strengths</strong><ul style="margin:.25rem 0 0 1rem;">${strengths.slice(0, 4).map(s => `<li>${String(s)}</li>`).join('')}</ul></div>` : ''}
+            ${improve.length ? `<div style="margin-top:.45rem;"><strong style="font-size:.76rem;">Improve next</strong><ul style="margin:.25rem 0 0 1rem;">${improve.slice(0, 4).map(s => `<li>${String(s)}</li>`).join('')}</ul></div>` : ''}
+            ${followUp ? `<div style="margin-top:.55rem; border-top:1px dashed var(--outline); padding-top:.45rem;"><strong style="font-size:.76rem;">Follow-up</strong><div style="margin-top:.2rem;">${followUp}</div></div>` : ''}
+          `;
+
+          pushBubble('assistant', aiHtml);
+          caseflowHistory.push({ role: 'assistant', content: `${feedback}${followUp ? ` Follow-up: ${followUp}` : ''}`.trim() });
+          if ($status) $status.textContent = 'Evaluation ready. Reply again to continue the chat.';
+          if ($input) $input.value = '';
+        } catch (err) {
+          console.error('[CaseFlow] evaluate error:', err);
+          if ($status) $status.textContent = err?.message || 'Evaluation failed';
+          snack(err?.message || 'CaseFlow evaluation failed');
+        } finally {
+          if ($send) {
+            $send.disabled = false;
+            $send.style.opacity = '1';
+          }
+        }
+      }
+
+      $send?.addEventListener('click', evaluateAnswer);
+      $input?.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          evaluateAnswer();
+        }
+      });
+      $back?.addEventListener('click', () => {
+        exitCaseFlowPreview();
+        snack('Returned to notes');
+      });
+    }
+
+    if ($caseflowBtn) {
+      $caseflowBtn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (caseflowActive) {
+          exitCaseFlowPreview();
+          snack('Returned to notes');
+          return;
+        }
+
+        const topic = currentTopicOrHeading();
+        if (!topic) {
+          snack('No topic loaded — generate notes first');
+          return;
+        }
+
+        const origHTML = $caseflowBtn.innerHTML;
+        $caseflowBtn.innerHTML = '<span class="st-btn-icon material-symbols-rounded animate-spin">progress_activity</span><span class="st-btn-text"><span class="st-btn-label">Loading…</span><span class="st-btn-desc">Preparing scenario</span></span>';
+        $caseflowBtn.disabled = true;
+
+        try {
+          const res = await fetch(`${apiBase}/api/notes/caseflow`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic, variant: currentVariant }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = (data && (data.detail || data.error)) || `Request failed (${res.status})`;
+            throw new Error(detail);
+          }
+
+          const scenario = String((data && data.scenario_question) || '').trim();
+          if (!scenario) {
+            throw new Error('No scenario question returned');
+          }
+          renderCaseFlowUI(topic, scenario, !!data.cached);
+          if (data.cached) snack('Loaded cached CaseFlow scenario');
+        } catch (err) {
+          console.error('[CaseFlow] load error:', err);
+          snack(err?.message || 'Failed to open CaseFlow');
+        } finally {
+          $caseflowBtn.innerHTML = origHTML;
+          $caseflowBtn.disabled = false;
+        }
+      });
+    }
+
+    // ===== Viva Simulator (Examiner-style cross questioning) =====
+    let vivaSavedMarkdown = '';
+    let vivaSavedImageUrls = [];
+    let vivaActive = false;
+    let vivaHistory = [];
+    let vivaTopic = '';
+
+    function exitVivaPreview() {
+      if (!vivaActive) return;
+      vivaActive = false;
+      vivaHistory = [];
+      vivaTopic = '';
+      if (vivaSavedMarkdown) {
+        renderMarkdown(vivaSavedMarkdown);
+        renderImageGallery(vivaSavedImageUrls);
+      }
+      vivaSavedMarkdown = '';
+      vivaSavedImageUrls = [];
+    }
+
+    function renderVivaUI(topic) {
+      if (!$output) return;
+      vivaSavedMarkdown = lastMarkdown || '';
+      vivaSavedImageUrls = [...lastImageUrls];
+      vivaActive = true;
+      vivaHistory = [];
+      vivaTopic = topic;
+      if ($images) $images.innerHTML = '';
+
+      $output.innerHTML = `
+        <div id="vivaRoot" style="max-width:900px; margin:0 auto; display:flex; flex-direction:column; gap:1rem;">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.7rem;">
+            <h2 style="margin:0; font-size:1.22rem; font-weight:800; display:flex; align-items:center; gap:.5rem;">
+              <span class="material-symbols-rounded" style="color:var(--brand); font-size:1.35rem;">record_voice_over</span>
+              Viva Simulator
+            </h2>
+            <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
+              <span style="border:1px solid var(--outline); border-radius:999px; padding:.3rem .7rem; font-size:.72rem; background:var(--brand-soft); color:var(--brand); font-weight:700;">${topic}</span>
+              <button id="vivaBackBtn" type="button" style="display:inline-flex; align-items:center; gap:.35rem; border:1px solid var(--outline); border-radius:999px; padding:.45rem .95rem; font-size:.8rem; font-weight:600; cursor:pointer; background:transparent; color:inherit; transition:all .2s;" onmouseover="this.style.background='var(--brand-soft)'" onmouseout="this.style.background='transparent'">
+                <span class="material-symbols-rounded" style="font-size:1rem;">arrow_back</span>
+                Back to Notes
+              </button>
+            </div>
+          </div>
+
+          <div style="border:1px solid var(--outline); border-radius:1rem; padding:.85rem 1rem; background:color-mix(in oklab, var(--surface) 90%, transparent);">
+            <div style="font-size:.78rem; color:var(--muted); line-height:1.45;">
+              🧠 Viva mode: examiner asks <strong>Why</strong>, <strong>How</strong>, <strong>What if</strong>, and <strong>Differentiate</strong> questions.
+              Be concise and evidence-based.
+            </div>
+          </div>
+
+          <div id="vivaChatBox" style="border:1px solid var(--outline); border-radius:1rem; background:color-mix(in oklab, var(--surface) 90%, transparent); min-height:260px; max-height:470px; overflow:auto; padding:.95rem; display:flex; flex-direction:column; gap:.75rem;"></div>
+
+          <div style="border:1px solid var(--outline); border-radius:1rem; padding:.9rem; background:color-mix(in oklab, var(--surface) 92%, transparent); display:flex; flex-direction:column; gap:.65rem;">
+            <label for="vivaAnswerInput" style="font-size:.74rem; text-transform:uppercase; letter-spacing:.06em; font-weight:700; color:var(--muted);">Your viva answer</label>
+            <textarea id="vivaAnswerInput" rows="4" placeholder="Type your answer (exam style, concise)..." style="width:100%; border:1px solid var(--outline); border-radius:.8rem; background:var(--surface); color:var(--surface-contrast); padding:.75rem .85rem; font-size:.9rem; line-height:1.45; resize:vertical; min-height:110px;"></textarea>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:.6rem; flex-wrap:wrap;">
+              <span id="vivaStatus" style="font-size:.78rem; color:var(--muted);"></span>
+              <button id="vivaSendBtn" type="button" style="display:inline-flex; align-items:center; gap:.35rem; border:none; border-radius:999px; padding:.55rem 1.05rem; background:linear-gradient(135deg, var(--brand), var(--brand-strong, #4C2A59)); color:#fff; font-size:.82rem; font-weight:700; cursor:pointer; box-shadow:0 8px 24px rgba(158,75,138,.3); transition:transform .18s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">
+                <span class="material-symbols-rounded" style="font-size:1rem;">send</span>
+                Respond
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const $chatBox = document.getElementById('vivaChatBox');
+      const $status = document.getElementById('vivaStatus');
+      const $input = document.getElementById('vivaAnswerInput');
+      const $send = document.getElementById('vivaSendBtn');
+      const $back = document.getElementById('vivaBackBtn');
+
+      function pushBubble(role, html, meta = '') {
+        if (!$chatBox) return;
+        const wrap = document.createElement('div');
+        const isUser = role === 'user';
+        wrap.style.cssText = `display:flex; justify-content:${isUser ? 'flex-end' : 'flex-start'};`;
+        const card = document.createElement('div');
+        card.style.cssText = [
+          'max-width:88%;',
+          'border:1px solid var(--outline);',
+          'border-radius:.9rem;',
+          'padding:.72rem .82rem;',
+          `background:${isUser ? 'linear-gradient(135deg, rgba(158,75,138,.2), rgba(76,42,89,.12))' : 'color-mix(in oklab, var(--surface) 85%, transparent)'};`,
+          'font-size:.88rem;',
+          'line-height:1.45;'
+        ].join('');
+        card.innerHTML = `
+          <div style="font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; color:var(--muted); margin-bottom:.35rem;">${isUser ? 'You' : 'Viva Examiner'}</div>
+          <div>${html}</div>
+          ${meta ? `<div style="margin-top:.45rem; font-size:.7rem; color:var(--muted);">${meta}</div>` : ''}
+        `;
+        wrap.appendChild(card);
+        $chatBox.appendChild(wrap);
+        $chatBox.scrollTop = $chatBox.scrollHeight;
+      }
+
+      async function requestVivaTurn(answerText = '') {
+        if ($status) $status.textContent = 'Examiner is preparing next question…';
+        try {
+          const res = await fetch(`${apiBase}/api/notes/viva/respond`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              topic,
+              variant: currentVariant,
+              answer: answerText,
+              history: vivaHistory,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = (data && (data.detail || data.error)) || `Request failed (${res.status})`;
+            throw new Error(detail);
+          }
+
+          const viva = (data && data.viva) ? data.viva : {};
+          const examinerReply = String(viva.examiner_reply || '').trim();
+          const crossQuestion = String(viva.cross_question || '').trim();
+          const qType = String(viva.question_type || '').trim();
+          const intensity = String(viva.intensity || '').trim();
+
+          const aiHtml = `
+            ${examinerReply ? `<div>${examinerReply}</div>` : ''}
+            ${crossQuestion ? `<div style="margin-top:.45rem; border-top:1px dashed var(--outline); padding-top:.45rem;"><strong style="font-size:.76rem;">${qType || 'Cross-question'}</strong><div style="margin-top:.2rem;">${crossQuestion}</div></div>` : ''}
+          `;
+          pushBubble('assistant', aiHtml, intensity ? `Mode: ${intensity}` : '');
+          vivaHistory.push({
+            role: 'assistant',
+            content: `${examinerReply}${crossQuestion ? ` Question: ${crossQuestion}` : ''}`.trim(),
+          });
+          if ($status) $status.textContent = 'Your turn. Answer concisely and clinically.';
+        } catch (err) {
+          console.error('[Viva] error:', err);
+          if ($status) $status.textContent = err?.message || 'Viva request failed';
+          snack(err?.message || 'Failed to continue Viva');
+        }
+      }
+
+      async function submitVivaAnswer() {
+        const ans = ($input?.value || '').trim();
+        if (!ans) {
+          snack('Type your viva answer first');
+          $input?.focus();
+          return;
+        }
+        if ($send) {
+          $send.disabled = true;
+          $send.style.opacity = '.65';
+        }
+
+        pushBubble('user', ans.replace(/\n/g, '<br/>'));
+        vivaHistory.push({ role: 'user', content: ans });
+
+        await requestVivaTurn(ans);
+        if ($input) $input.value = '';
+
+        if ($send) {
+          $send.disabled = false;
+          $send.style.opacity = '1';
+        }
+      }
+
+      $send?.addEventListener('click', submitVivaAnswer);
+      $input?.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          submitVivaAnswer();
+        }
+      });
+      $back?.addEventListener('click', () => {
+        exitVivaPreview();
+        snack('Returned to notes');
+      });
+
+      requestVivaTurn('');
+    }
+
+    if ($vivaBtn) {
+      $vivaBtn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (vivaActive) {
+          exitVivaPreview();
+          snack('Returned to notes');
+          return;
+        }
+
+        const topic = currentTopicOrHeading();
+        if (!topic) {
+          snack('No topic loaded — generate notes first');
+          return;
+        }
+
+        renderVivaUI(topic);
+      });
+    }
+
+    // ===== Interactive Mind Map (Clinical Decision Tree) =====
+    let decisionTreeSavedMarkdown = '';
+    let decisionTreeSavedImageUrls = [];
+    let decisionTreeActive = false;
+
+    function exitDecisionTreePreview() {
+      if (!decisionTreeActive) return;
+      decisionTreeActive = false;
+      if (decisionTreeSavedMarkdown) {
+        renderMarkdown(decisionTreeSavedMarkdown);
+        renderImageGallery(decisionTreeSavedImageUrls);
+      }
+      decisionTreeSavedMarkdown = '';
+      decisionTreeSavedImageUrls = [];
+    }
+
+    function buildMindMapNode(nodeData, depth, maxDepth) {
+      if (!nodeData || depth > maxDepth) return null;
+      const hasChildren = Array.isArray(nodeData.children) && nodeData.children.length > 0;
+
+      // Outer wrapper (vertical: header + children below)
+      const wrap = document.createElement('div');
+      wrap.className = `mm-node mm-depth-${Math.min(depth, 4)}`;
+
+      // Header row: label + toggle + badge
+      const header = document.createElement('div');
+      header.className = 'mm-node-header';
+
+      // Label
+      const label = document.createElement('span');
+      label.className = 'mm-label';
+      label.textContent = nodeData.label || '—';
+      label.title = nodeData.label || '';
+      if (hasChildren) label.setAttribute('data-expandable', '');
+      header.appendChild(label);
+
+      if (hasChildren) {
+        // Toggle button with material icon
+        const toggle = document.createElement('span');
+        toggle.className = 'mm-toggle';
+        const icon = document.createElement('span');
+        icon.className = 'material-symbols-rounded';
+        const startExpanded = depth <= 0;
+        icon.textContent = startExpanded ? 'expand_less' : 'chevron_right';
+        toggle.appendChild(icon);
+        toggle.title = startExpanded ? 'Collapse' : 'Expand';
+        if (startExpanded) toggle.classList.add('mm-expanded');
+        header.appendChild(toggle);
+
+        // Count badge
+        const badge = document.createElement('span');
+        badge.className = 'mm-count-badge';
+        badge.textContent = nodeData.children.length;
+        badge.title = `${nodeData.children.length} sub-topics`;
+        header.appendChild(badge);
+
+        wrap.appendChild(header);
+
+        // Children container
+        const childrenWrap = document.createElement('div');
+        childrenWrap.className = 'mm-children';
+        if (startExpanded) childrenWrap.classList.add('mm-open');
+
+        nodeData.children.forEach(child => {
+          const childNode = buildMindMapNode(child, depth + 1, maxDepth);
+          if (childNode) {
+            const row = document.createElement('div');
+            row.className = 'mm-child-row';
+            row.appendChild(childNode);
+            childrenWrap.appendChild(row);
+          }
+        });
+
+        wrap.appendChild(childrenWrap);
+
+        // Click handlers
+        function toggleExpand() {
+          const isOpen = childrenWrap.classList.contains('mm-open');
+          childrenWrap.classList.toggle('mm-open');
+          icon.textContent = isOpen ? 'chevron_right' : 'expand_less';
+          toggle.title = isOpen ? 'Expand' : 'Collapse';
+          toggle.classList.toggle('mm-expanded', !isOpen);
+        }
+        toggle.addEventListener('click', (e) => { e.stopPropagation(); toggleExpand(); });
+        label.addEventListener('click', (e) => { e.stopPropagation(); toggleExpand(); });
+      } else {
+        wrap.appendChild(header);
+      }
+
+      return wrap;
+    }
+
+    function renderMindMapUI(topic, mindMapData) {
+      decisionTreeSavedMarkdown = lastMarkdown || '';
+      decisionTreeSavedImageUrls = [...lastImageUrls];
+      decisionTreeActive = true;
+      if ($images) $images.innerHTML = '';
+
+      const tbBtnStyle = `display:inline-flex; align-items:center; gap:.3rem; border:1px solid var(--outline); border-radius:999px; padding:.38rem .75rem; font-size:.74rem; font-weight:600; cursor:pointer; background:transparent; color:inherit;`;
+
+      $output.innerHTML = `
+        <div id="mindMapRoot" style="max-width:100%; margin:0 auto; display:flex; flex-direction:column; gap:.75rem;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:.5rem; flex-wrap:wrap; border:1px solid var(--outline); border-radius:1rem; padding:.5rem .7rem; background:color-mix(in oklab, var(--surface) 90%, transparent);">
+            <div style="display:flex; align-items:center; gap:.4rem; font-size:.84rem; font-weight:700; color:var(--brand);">
+              <span class="material-symbols-rounded" style="font-size:1.1rem;">schema</span>
+              Mind Map — ${topic}
+            </div>
+            <div style="display:flex; align-items:center; gap:.35rem; flex-wrap:wrap;">
+              <button id="mmZoomIn" type="button" style="${tbBtnStyle}" title="Zoom In">
+                <span class="material-symbols-rounded" style="font-size:.9rem;">zoom_in</span>
+              </button>
+              <span id="mmZoomLevel" style="font-size:.7rem; font-weight:600; min-width:36px; text-align:center; color:var(--muted);">100%</span>
+              <button id="mmZoomOut" type="button" style="${tbBtnStyle}" title="Zoom Out">
+                <span class="material-symbols-rounded" style="font-size:.9rem;">zoom_out</span>
+              </button>
+              <button id="mmResetView" type="button" style="${tbBtnStyle}" title="Reset View">
+                <span class="material-symbols-rounded" style="font-size:.9rem;">fit_screen</span>
+              </button>
+              <div style="width:1px; height:20px; background:var(--outline); margin:0 .15rem;"></div>
+              <button id="mindMapExpandAll" type="button" style="${tbBtnStyle}" title="Expand all">
+                <span class="material-symbols-rounded" style="font-size:.9rem;">unfold_more</span>
+                Expand
+              </button>
+              <button id="mindMapCollapseAll" type="button" style="${tbBtnStyle}" title="Collapse all">
+                <span class="material-symbols-rounded" style="font-size:.9rem;">unfold_less</span>
+                Collapse
+              </button>
+              <div style="width:1px; height:20px; background:var(--outline); margin:0 .15rem;"></div>
+              <button id="mindMapRegenBtn" type="button" style="display:inline-flex; align-items:center; gap:.3rem; border:none; border-radius:999px; padding:.42rem .85rem; font-size:.76rem; font-weight:700; cursor:pointer; background:linear-gradient(135deg, var(--brand), #4C2A59); color:#fff; box-shadow:0 4px 14px rgba(158,75,138,.25); transition:transform .15s;" title="Regenerate mind map">
+                <span class="material-symbols-rounded" style="font-size:.9rem;">refresh</span>
+                Regenerate
+              </button>
+              <button id="mindMapBackBtn" type="button" style="${tbBtnStyle}">
+                <span class="material-symbols-rounded" style="font-size:1rem;">arrow_back</span>
+                Back
+              </button>
+            </div>
+          </div>
+          <div id="mindMapCanvas" class="mindmap-container">
+            <div id="mmViewport" class="mm-viewport"></div>
+          </div>
+        </div>
+      `;
+
+      const canvas = document.getElementById('mindMapCanvas');
+      const viewport = document.getElementById('mmViewport');
+
+      if (viewport && mindMapData && mindMapData.label) {
+        const tree = buildMindMapNode(mindMapData, 0, 4);
+        if (tree) viewport.appendChild(tree);
+      } else if (viewport) {
+        viewport.innerHTML = '<p style="color:var(--muted); padding:2rem; text-align:center;">Mind map data unavailable. Try again.</p>';
+      }
+
+      // === Pan & Zoom State ===
+      let zoom = 1, panX = 0, panY = 0;
+      let isPanning = false, startX = 0, startY = 0;
+
+      function applyTransform() {
+        if (viewport) viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+        const label = document.getElementById('mmZoomLevel');
+        if (label) label.textContent = Math.round(zoom * 100) + '%';
+      }
+
+      // Mouse pan
+      canvas?.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.mm-label, .mm-toggle, .mm-count-badge')) return;
+        isPanning = true;
+        startX = e.clientX - panX;
+        startY = e.clientY - panY;
+        canvas.classList.add('mm-grabbing');
+      });
+      document.addEventListener('mousemove', (e) => {
+        if (!isPanning) return;
+        panX = e.clientX - startX;
+        panY = e.clientY - startY;
+        applyTransform();
+      });
+      document.addEventListener('mouseup', () => {
+        isPanning = false;
+        canvas?.classList.remove('mm-grabbing');
+      });
+
+      // Scroll wheel zoom
+      canvas?.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.08 : 0.08;
+        zoom = Math.min(2.5, Math.max(0.3, zoom + delta));
+        applyTransform();
+      }, { passive: false });
+
+      // Zoom buttons
+      document.getElementById('mmZoomIn')?.addEventListener('click', () => {
+        zoom = Math.min(2.5, zoom + 0.15);
+        applyTransform();
+      });
+      document.getElementById('mmZoomOut')?.addEventListener('click', () => {
+        zoom = Math.max(0.3, zoom - 0.15);
+        applyTransform();
+      });
+      document.getElementById('mmResetView')?.addEventListener('click', () => {
+        zoom = 1; panX = 0; panY = 0;
+        applyTransform();
+      });
+
+      // Back
+      document.getElementById('mindMapBackBtn')?.addEventListener('click', () => {
+        exitDecisionTreePreview();
+        snack('Returned to notes');
+      });
+
+      // Expand All
+      document.getElementById('mindMapExpandAll')?.addEventListener('click', () => {
+        viewport?.querySelectorAll('.mm-children').forEach(el => el.classList.add('mm-open'));
+        viewport?.querySelectorAll('.mm-toggle').forEach(t => {
+          t.classList.add('mm-expanded');
+          t.title = 'Collapse';
+          const ic = t.querySelector('.material-symbols-rounded');
+          if (ic) ic.textContent = 'expand_less';
+        });
+      });
+
+      // Collapse All (keep root open)
+      document.getElementById('mindMapCollapseAll')?.addEventListener('click', () => {
+        [...(viewport?.querySelectorAll('.mm-children') || [])].forEach((el, i) => {
+          if (i === 0) return;
+          el.classList.remove('mm-open');
+        });
+        [...(viewport?.querySelectorAll('.mm-toggle') || [])].forEach((t, i) => {
+          if (i === 0) return;
+          t.classList.remove('mm-expanded');
+          t.title = 'Expand';
+          const ic = t.querySelector('.material-symbols-rounded');
+          if (ic) ic.textContent = 'chevron_right';
+        });
+      });
+
+      // Regenerate
+      document.getElementById('mindMapRegenBtn')?.addEventListener('click', async () => {
+        const regenBtn = document.getElementById('mindMapRegenBtn');
+        if (!regenBtn || regenBtn.disabled) return;
+        regenBtn.disabled = true;
+        const origRegenHTML = regenBtn.innerHTML;
+        regenBtn.innerHTML = '<span class="material-symbols-rounded animate-spin" style="font-size:.9rem;">progress_activity</span> Generating…';
+        if (viewport) viewport.innerHTML = '<div style="display:flex; align-items:center; justify-content:center; padding:3rem; gap:.5rem; color:var(--muted);"><span class="material-symbols-rounded animate-spin" style="font-size:1.4rem;">progress_activity</span> Regenerating mind map…</div>';
+        try {
+          const res = await fetch(`${apiBase}/api/notes/clinical-decision-tree`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic, variant: currentVariant, force: true }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error((data && (data.detail || data.error)) || 'Regeneration failed');
+          const freshMap = data.mind_map || null;
+          if (!freshMap || !freshMap.label) throw new Error('Invalid data');
+          if (viewport) { viewport.innerHTML = ''; }
+          zoom = 1; panX = 0; panY = 0; applyTransform();
+          const tree = buildMindMapNode(freshMap, 0, 4);
+          if (tree && viewport) viewport.appendChild(tree);
+          snack('Mind map regenerated!');
+        } catch (err) {
+          console.error('[MindMap] regen error:', err);
+          snack(err?.message || 'Regeneration failed');
+          if (viewport) viewport.innerHTML = '<p style="color:var(--muted); padding:2rem; text-align:center;">Regeneration failed. Try again.</p>';
+        } finally {
+          regenBtn.innerHTML = origRegenHTML;
+          regenBtn.disabled = false;
+        }
+      });
+    }
+
+    if ($decisionTreeBtn) {
+      $decisionTreeBtn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (decisionTreeActive) {
+          exitDecisionTreePreview();
+          snack('Returned to notes');
+          return;
+        }
+
+        const topic = currentTopicOrHeading();
+        if (!topic) {
+          snack('No topic loaded — generate notes first');
+          return;
+        }
+
+        const origHTML = $decisionTreeBtn.innerHTML;
+        $decisionTreeBtn.innerHTML = '<span class="st-btn-icon material-symbols-rounded animate-spin">progress_activity</span><span class="st-btn-text"><span class="st-btn-label">Loading…</span><span class="st-btn-desc">Building mind map</span></span>';
+        $decisionTreeBtn.disabled = true;
+
+        try {
+          const res = await fetch(`${apiBase}/api/notes/clinical-decision-tree`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic, variant: currentVariant }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = (data && (data.detail || data.error)) || `Request failed (${res.status})`;
+            throw new Error(detail);
+          }
+          // Extract mind_map from response (handle both new and old formats)
+          const mindMapData = data.mind_map || (data.decision_tree && data.decision_tree.mind_map) || null;
+          if (!mindMapData || !mindMapData.label) {
+            throw new Error('Invalid mind map data received');
+          }
+          renderMindMapUI(topic, mindMapData);
+        } catch (err) {
+          console.error('[MindMap] error:', err);
+          snack(err?.message || 'Failed to generate mind map');
+        } finally {
+          $decisionTreeBtn.innerHTML = origHTML;
+          $decisionTreeBtn.disabled = false;
+        }
+      });
+    }
+
+    // ===== Match the Following (Interactive Quiz) =====
+    let matchFollSavedMarkdown = '';
+    let matchFollSavedImageUrls = [];
+    let matchFollActive = false;
+
+    function exitMatchFollPreview() {
+      if (!matchFollActive) return;
+      matchFollActive = false;
+      if (matchFollSavedMarkdown) {
+        renderMarkdown(matchFollSavedMarkdown);
+        renderImageGallery(matchFollSavedImageUrls);
+      }
+      matchFollSavedMarkdown = '';
+      matchFollSavedImageUrls = [];
+    }
+
+    function shuffleArray(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    function renderMatchFollUI(pairs, topic) {
+      if (!$output) return;
+
+      // Save current content
+      matchFollSavedMarkdown = lastMarkdown || '';
+      matchFollSavedImageUrls = [...lastImageUrls];
+      matchFollActive = true;
+      if ($images) $images.innerHTML = '';
+
+      const shuffledDefs = shuffleArray(pairs.map((p, i) => ({ ...p, origIdx: i })));
+
+      // State
+      let selectedTermIdx = null;
+      let matches = []; // Maps termIdx -> defOrigIdx
+      let checked = false;
+
+      const brandColor = getComputedStyle(document.documentElement).getPropertyValue('--brand-600').trim() || '#9E4B8A';
+
+      $output.innerHTML = `
+        <div id="matchFollRoot" style="max-width:720px; margin:0 auto;">
+          <!-- Header -->
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.75rem; margin-bottom:1.5rem;">
+            <h2 style="margin:0; font-size:1.2rem; font-weight:800; display:flex; align-items:center; gap:.5rem; letter-spacing:-.02em;">
+              <span class="material-symbols-rounded" style="color:var(--brand); font-size:1.4rem;">swap_horiz</span>
+              Match the Following
+            </h2>
+            <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+              <button id="mfBackBtn" type="button" style="display:inline-flex; align-items:center; gap:.35rem; border:1px solid var(--outline); border-radius:999px; padding:.45rem .9rem; font-size:.78rem; font-weight:600; cursor:pointer; background:transparent; color:inherit; transition:all .2s;" onmouseover="this.style.background='var(--brand-soft)';this.style.borderColor='var(--brand)'" onmouseout="this.style.background='transparent';this.style.borderColor='var(--outline)'">
+                <span class="material-symbols-rounded" style="font-size:1rem;">arrow_back</span>
+                Back to Notes
+              </button>
+            </div>
+          </div>
+
+          <!-- Topic pill -->
+          <div style="margin-bottom:1.25rem; display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
+            <span style="background:var(--brand-soft); color:var(--brand); border:1px solid color-mix(in oklab, var(--brand) 30%, transparent); border-radius:999px; padding:.3rem .75rem; font-size:.72rem; font-weight:700; letter-spacing:.03em; text-transform:uppercase;">
+              ${topic}
+            </span>
+            <span style="font-size:.75rem; color:var(--muted, #888);">Click a term, then click its definition</span>
+          </div>
+
+          <!-- Matching area -->
+          <div id="mfGrid" style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem;"></div>
+
+          <!-- Actions -->
+          <div style="display:flex; justify-content:center; gap:.75rem; flex-wrap:wrap; margin-bottom:1rem;">
+            <button id="mfCheckBtn" type="button" style="display:inline-flex; align-items:center; gap:.4rem; background:linear-gradient(135deg, var(--brand), color-mix(in oklab, var(--brand) 70%, #CA6CB3)); color:#fff; border:none; border-radius:999px; padding:.6rem 1.5rem; font-size:.85rem; font-weight:700; cursor:pointer; box-shadow:0 4px 20px color-mix(in oklab, var(--brand) 25%, transparent); transition:all .2s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">
+              <span class="material-symbols-rounded" style="font-size:1.1rem;">check_circle</span>
+              Submit
+            </button>
+            <button id="mfShowAnsBtn" type="button" style="display:none; align-items:center; gap:.4rem; border:1px solid var(--outline); border-radius:999px; padding:.6rem 1.2rem; font-size:.85rem; font-weight:600; cursor:pointer; background:transparent; color:inherit; transition:all .2s;" onmouseover="this.style.background='var(--brand-soft)'" onmouseout="this.style.background='transparent'">
+              <span class="material-symbols-rounded" style="font-size:1.1rem;">visibility</span>
+              Show Correct Ans
+            </button>
+            <button id="mfResetBtn" type="button" style="display:inline-flex; align-items:center; gap:.4rem; border:1px solid var(--outline); border-radius:999px; padding:.6rem 1.2rem; font-size:.85rem; font-weight:600; cursor:pointer; background:transparent; color:inherit; transition:all .2s;" onmouseover="this.style.background='var(--brand-soft)'" onmouseout="this.style.background='transparent'">
+              <span class="material-symbols-rounded" style="font-size:1.1rem;">refresh</span>
+              Reset
+            </button>
+          </div>
+
+          <!-- Score area -->
+          <div id="mfScore" style="display:none;"></div>
+
+          <!-- Correct answers area -->
+          <div id="mfCorrectAns" style="display:none;"></div>
+        </div>
+      `;
+
+      const $grid = document.getElementById('mfGrid');
+      const $checkBtn = document.getElementById('mfCheckBtn');
+      const $resetBtn = document.getElementById('mfResetBtn');
+      const $showAnsBtn = document.getElementById('mfShowAnsBtn');
+      const $scoreArea = document.getElementById('mfScore');
+      const $correctAnsArea = document.getElementById('mfCorrectAns');
+      const $backBtn = document.getElementById('mfBackBtn');
+
+      function buildCards() {
+        matches = new Array(pairs.length).fill(-1);
+        $grid.innerHTML = '';
+        // Left column: terms
+        const leftCol = document.createElement('div');
+        leftCol.style.cssText = 'display:flex; flex-direction:column; gap:.75rem;';
+        const leftLabel = document.createElement('div');
+        leftLabel.style.cssText = 'font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted, #888); padding:0 .25rem .25rem;';
+        leftLabel.textContent = 'Terms';
+        leftCol.appendChild(leftLabel);
+
+        pairs.forEach((p, i) => {
+          const card = document.createElement('div');
+          card.dataset.termIdx = i;
+          card.className = 'mf-term-card';
+          card.style.cssText = `
+            border: 1.5px solid var(--outline);
+            border-radius: 1rem;
+            padding: .85rem 1rem;
+            cursor: pointer;
+            background: color-mix(in oklab, var(--surface) 80%, transparent);
+            backdrop-filter: blur(12px);
+            font-size: .88rem;
+            font-weight: 600;
+            transition: all .2s cubic-bezier(.4,0,.2,1);
+            position: relative;
+            overflow: hidden;
+            user-select: none;
+          `;
+          const badge = document.createElement('span');
+          badge.style.cssText = 'position:absolute; top:.5rem; right:.6rem; font-size:.65rem; font-weight:700; color:var(--muted, #888); background:var(--brand-soft); border-radius:999px; padding:.12rem .4rem;';
+          badge.textContent = i + 1;
+          card.appendChild(badge);
+
+          const text = document.createElement('span');
+          text.textContent = p.term;
+          card.appendChild(text);
+
+          const conn = document.createElement('div');
+          conn.className = 'mf-conn-indicator';
+          conn.style.cssText = 'position:absolute; bottom:0; left:0; right:0; height:3px; background:transparent; transition:background .2s; border-radius:0 0 1rem 1rem;';
+          card.appendChild(conn);
+
+          card.addEventListener('mouseenter', () => {
+            if (checked) return;
+            if (selectedTermIdx !== i) card.style.background = 'color-mix(in oklab, var(--surface) 65%, transparent)';
+          });
+          card.addEventListener('mouseleave', () => {
+            if (checked) return;
+            if (selectedTermIdx !== i) card.style.background = 'color-mix(in oklab, var(--surface) 80%, transparent)';
+          });
+          card.addEventListener('click', () => {
+            if (checked) return;
+            selectTerm(i);
+          });
+
+          leftCol.appendChild(card);
+        });
+
+        // Right column: shuffled definitions
+        const rightCol = document.createElement('div');
+        rightCol.style.cssText = 'display:flex; flex-direction:column; gap:.75rem;';
+        const rightLabel = document.createElement('div');
+        rightLabel.style.cssText = 'font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted, #888); padding:0 .25rem .25rem;';
+        rightLabel.textContent = 'Definitions';
+        rightCol.appendChild(rightLabel);
+
+        shuffledDefs.forEach((d) => {
+          const card = document.createElement('div');
+          card.dataset.defOrigIdx = d.origIdx;
+          card.className = 'mf-def-card';
+          card.style.cssText = `
+            border: 1.5px solid var(--outline);
+            border-radius: 1rem;
+            padding: .85rem 1rem;
+            cursor: pointer;
+            background: color-mix(in oklab, var(--surface) 80%, transparent);
+            backdrop-filter: blur(12px);
+            font-size: .84rem;
+            line-height: 1.45;
+            transition: all .2s cubic-bezier(.4,0,.2,1);
+            position: relative;
+            overflow: hidden;
+            user-select: none;
+          `;
+          const matchBadge = document.createElement('span');
+          matchBadge.className = 'mf-match-badge';
+          matchBadge.style.cssText = 'position:absolute; top:.5rem; right:.6rem; font-size:.65rem; font-weight:700; color:#fff; background:var(--brand); border-radius:999px; padding:.12rem .4rem; display:none; justify-content:center; align-items:center; min-width:1.25rem; text-align:center; z-index:10; box-shadow:0 2px 4px rgba(0,0,0,0.1);';
+          card.appendChild(matchBadge);
+
+          const text = document.createElement('span');
+          text.textContent = d.definition;
+          card.appendChild(text);
+
+          const conn = document.createElement('div');
+          conn.className = 'mf-conn-indicator';
+          conn.style.cssText = 'position:absolute; bottom:0; left:0; right:0; height:3px; background:transparent; transition:background .2s; border-radius:0 0 1rem 1rem;';
+          card.appendChild(conn);
+
+          card.addEventListener('mouseenter', () => {
+            if (checked) return;
+            if (selectedTermIdx !== null) card.style.borderColor = 'var(--brand)';
+          });
+          card.addEventListener('mouseleave', () => {
+            if (checked) return;
+            const isMatched = matches.includes(d.origIdx);
+            if (!isMatched) card.style.borderColor = 'var(--outline)';
+          });
+          card.addEventListener('click', () => {
+            if (checked) return;
+            if (selectedTermIdx === null) {
+              snack('Select a term first');
+              return;
+            }
+            matchDef(d.origIdx);
+          });
+
+          rightCol.appendChild(card);
+        });
+
+        $grid.appendChild(leftCol);
+        $grid.appendChild(rightCol);
+      }
+
+      function selectTerm(idx) {
+        selectedTermIdx = idx;
+        $grid.querySelectorAll('.mf-term-card').forEach(c => {
+          const ti = parseInt(c.dataset.termIdx);
+          const isSelected = ti === idx;
+          const isMatched = matches[ti] !== -1;
+
+          if (isSelected) {
+            c.style.borderColor = 'var(--brand)';
+            c.style.background = 'var(--brand-soft)';
+            c.querySelector('.mf-conn-indicator').style.background = 'var(--brand)';
+          } else if (isMatched) {
+            c.style.borderColor = 'color-mix(in oklab, var(--brand) 50%, transparent)';
+            c.style.background = 'var(--brand-soft)';
+            c.querySelector('.mf-conn-indicator').style.background = 'var(--brand)';
+          } else {
+            c.style.borderColor = 'var(--outline)';
+            c.style.background = 'color-mix(in oklab, var(--surface) 80%, transparent)';
+            c.querySelector('.mf-conn-indicator').style.background = 'transparent';
+          }
+        });
+      }
+
+      function matchDef(defOrigIdx) {
+        if (selectedTermIdx === null) return;
+
+        // Remove any previous mapping to this def
+        for (let i = 0; i < matches.length; i++) {
+          if (matches[i] === defOrigIdx) {
+            matches[i] = -1;
+          }
+        }
+
+        matches[selectedTermIdx] = defOrigIdx;
+        selectedTermIdx = null;
+
+        // Highlight terms
+        $grid.querySelectorAll('.mf-term-card').forEach(c => {
+          const ti = parseInt(c.dataset.termIdx);
+          const isMatched = matches[ti] !== -1;
+          if (isMatched) {
+            c.style.borderColor = 'color-mix(in oklab, var(--brand) 50%, transparent)';
+            c.style.background = 'var(--brand-soft)';
+            c.querySelector('.mf-conn-indicator').style.background = 'var(--brand)';
+          } else {
+            c.style.borderColor = 'var(--outline)';
+            c.style.background = 'color-mix(in oklab, var(--surface) 80%, transparent)';
+            c.querySelector('.mf-conn-indicator').style.background = 'transparent';
+          }
+        });
+
+        // Highlight definitions
+        $grid.querySelectorAll('.mf-def-card').forEach(c => {
+          const di = parseInt(c.dataset.defOrigIdx);
+          const matchedTermIdx = matches.indexOf(di);
+          const badge = c.querySelector('.mf-match-badge');
+          if (matchedTermIdx !== -1) {
+            badge.textContent = matchedTermIdx + 1;
+            badge.style.display = 'inline-flex';
+            c.style.borderColor = 'color-mix(in oklab, var(--brand) 50%, transparent)';
+            c.querySelector('.mf-conn-indicator').style.background = 'var(--brand)';
+          } else {
+            badge.style.display = 'none';
+            c.style.borderColor = 'var(--outline)';
+            c.querySelector('.mf-conn-indicator').style.background = 'transparent';
+          }
+        });
+
+        // Ensure Submit button is visible and scrolling helps if needed
+        $checkBtn.style.display = 'inline-flex';
+        $checkBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+
+      function checkAnswers() {
+        const remaining = matches.filter(m => m === -1).length;
+        if (remaining > 0) {
+          snack(`Match ${remaining} more pair(s) first`);
+          return;
+        }
+        checked = true;
+        let correct = 0;
+
+        $grid.querySelectorAll('.mf-term-card').forEach(c => {
+          const ti = parseInt(c.dataset.termIdx);
+          const isCorrect = matches[ti] === ti;
+          if (isCorrect) correct++;
+          c.style.borderColor = isCorrect ? 'rgba(16,185,129,.85)' : 'rgba(239,68,68,.85)';
+          c.style.background = isCorrect ? 'rgba(16,185,129,.08)' : 'rgba(239,68,68,.08)';
+          c.querySelector('.mf-conn-indicator').style.background = isCorrect ? 'rgba(16,185,129,.85)' : 'rgba(239,68,68,.85)';
+          c.style.cursor = 'default';
+          const icon = document.createElement('span');
+          icon.className = 'material-symbols-rounded';
+          icon.style.cssText = `position:absolute; top:.45rem; left:.5rem; font-size:.9rem; color:${isCorrect ? 'rgba(16,185,129,.85)' : 'rgba(239,68,68,.85)'};`;
+          icon.textContent = isCorrect ? 'check_circle' : 'cancel';
+          c.appendChild(icon);
+        });
+
+        $grid.querySelectorAll('.mf-def-card').forEach(c => {
+          const di = parseInt(c.dataset.defOrigIdx);
+          const matchedTermIdx = matches.indexOf(di);
+          const isCorrect = matchedTermIdx !== -1 && matchedTermIdx === di;
+          c.style.borderColor = isCorrect ? 'rgba(16,185,129,.85)' : 'rgba(239,68,68,.85)';
+          c.style.background = isCorrect ? 'rgba(16,185,129,.08)' : 'rgba(239,68,68,.08)';
+          c.querySelector('.mf-conn-indicator').style.background = isCorrect ? 'rgba(16,185,129,.85)' : 'rgba(239,68,68,.85)';
+          c.style.cursor = 'default';
+          const badge = c.querySelector('.mf-match-badge');
+          if (badge) badge.style.background = isCorrect ? 'rgba(16,185,129,.85)' : 'rgba(239,68,68,.85)';
+        });
+
+        $checkBtn.disabled = true;
+        $checkBtn.style.opacity = '.5';
+
+        // Show the Show Correct Ans button after submit
+        $showAnsBtn.style.display = 'inline-flex';
+
+        const pct = Math.round((correct / pairs.length) * 100);
+        const isAllCorrect = correct === pairs.length;
+        $scoreArea.style.display = 'block';
+        $scoreArea.innerHTML = `
+          <div style="text-align:center; padding:1.5rem; border:1.5px solid var(--outline); border-radius:1.25rem; background:color-mix(in oklab, var(--surface) 80%, transparent); backdrop-filter:blur(12px);">
+            <div style="display:inline-flex; align-items:center; justify-content:center; width:80px; height:80px; border-radius:50%; background:${isAllCorrect ? 'linear-gradient(135deg, rgba(16,185,129,.15), rgba(16,185,129,.05))' : 'linear-gradient(135deg, var(--brand-soft), rgba(158,75,138,.03))'}; border:3px solid ${isAllCorrect ? 'rgba(16,185,129,.85)' : 'var(--brand-600)'}; margin-bottom:.75rem;">
+              <span style="font-size:1.5rem; font-weight:800; color:${isAllCorrect ? 'rgba(16,185,129,.85)' : 'var(--brand-600)'};">${pct}%</span>
+            </div>
+            <div style="font-size:1rem; font-weight:700; margin-bottom:.25rem;">${correct} / ${pairs.length} correct</div>
+            <div style="font-size:.8rem; color:var(--muted, #888);">${isAllCorrect ? '🎉 Perfect score! Great job!' : correct >= Math.ceil(pairs.length / 2) ? '👍 Good effort! Try again for a perfect score.' : '💪 Keep studying and try again!'}</div>
+          </div>
+        `;
+      }
+
+      function showCorrectAnswers() {
+        $correctAnsArea.style.display = 'block';
+        let rows = '';
+        pairs.forEach((p, i) => {
+          rows += `
+            <div style="display:flex; align-items:stretch; gap:.5rem; margin-bottom:.5rem;">
+              <div style="flex:1; border:1.5px solid rgba(16,185,129,.4); border-radius:.75rem; padding:.6rem .8rem; background:rgba(16,185,129,.06); font-size:.84rem; font-weight:600;">
+                <span style="display:inline-flex; align-items:center; justify-content:center; width:1.2rem; height:1.2rem; border-radius:50%; background:var(--brand-soft); color:var(--brand); font-size:.6rem; font-weight:800; margin-right:.4rem;">${i + 1}</span>
+                ${p.term}
+              </div>
+              <div style="display:flex; align-items:center; color:var(--brand);"><span class="material-symbols-rounded" style="font-size:1.1rem;">arrow_forward</span></div>
+              <div style="flex:1.3; border:1.5px solid rgba(16,185,129,.4); border-radius:.75rem; padding:.6rem .8rem; background:rgba(16,185,129,.06); font-size:.82rem; line-height:1.4;">
+                ${p.definition}
+              </div>
+            </div>`;
+        });
+        $correctAnsArea.innerHTML = `
+          <div style="border:1.5px solid var(--outline); border-radius:1.25rem; padding:1.25rem; background:color-mix(in oklab, var(--surface) 85%, transparent); margin-top:.75rem;">
+            <h3 style="margin:0 0 .75rem; font-size:.95rem; font-weight:700; display:flex; align-items:center; gap:.4rem;">
+              <span class="material-symbols-rounded" style="color:rgba(16,185,129,.85); font-size:1.15rem;">check_circle</span>
+              Correct Answers
+            </h3>
+            ${rows}
+          </div>
+        `;
+        $showAnsBtn.disabled = true;
+        $showAnsBtn.style.opacity = '.5';
+
+        setTimeout(() => {
+          $correctAnsArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 50);
+      }
+
+      function resetAll() {
+        selectedTermIdx = null;
+        matches = new Array(pairs.length).fill(-1);
+        checked = false;
+        $checkBtn.disabled = false;
+        $checkBtn.style.opacity = '1';
+        $showAnsBtn.style.display = 'none';
+        $showAnsBtn.disabled = false;
+        $showAnsBtn.style.opacity = '1';
+        $scoreArea.style.display = 'none';
+        $scoreArea.innerHTML = '';
+        $correctAnsArea.style.display = 'none';
+        $correctAnsArea.innerHTML = '';
+        buildCards();
+      }
+
+      // Wire events
+      $checkBtn?.addEventListener('click', checkAnswers);
+      $resetBtn?.addEventListener('click', resetAll);
+      $showAnsBtn?.addEventListener('click', showCorrectAnswers);
+      $backBtn?.addEventListener('click', () => {
+        exitMatchFollPreview();
+        snack('Returned to notes');
+      });
+
+      buildCards();
+    }
+
+    if ($matchFollBtn) {
+      $matchFollBtn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (matchFollActive) {
+          exitMatchFollPreview();
+          snack('Returned to notes');
+          return;
+        }
+
+        const topic = currentTopicOrHeading();
+        if (!topic) {
+          snack('No topic loaded — generate notes first');
+          return;
+        }
+
+        const origHTML = $matchFollBtn.innerHTML;
+        $matchFollBtn.innerHTML = '<span class="st-btn-icon material-symbols-rounded animate-spin">progress_activity</span><span class="st-btn-text"><span class="st-btn-label">Generating…</span><span class="st-btn-desc">Creating quiz pairs</span></span>';
+        $matchFollBtn.disabled = true;
+
+        try {
+          const res = await fetch(`${apiBase}/api/notes/match-following`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic }),
+          });
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error((err && err.detail) || `Request failed (${res.status})`);
+          }
+
+          const data = await res.json();
+          const pairs = data.pairs;
+          if (!Array.isArray(pairs) || pairs.length < 3) {
+            throw new Error('Not enough pairs returned');
+          }
+
+          renderMatchFollUI(pairs, topic);
+          if (data.cached) snack('Loaded cached quiz');
+
+        } catch (err) {
+          console.error('[MatchFoll] Error:', err);
+          snack(err.message || 'Failed to generate match quiz');
+        } finally {
+          $matchFollBtn.innerHTML = origHTML;
+          $matchFollBtn.disabled = false;
+        }
+      });
+    }
+
+    // Removed the $topic "input" event listener as the Topic Input Box was deleted.
+    // Video loading relies on the explicit calls from generation/cache-loading logic.
+
+    // ===== Ripple =====
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest('.ripple'); if (!b) return;
+      const rect = b.getBoundingClientRect();
+      const circle = document.createElement('span');
+      circle.style.position = 'absolute';
+      circle.style.left = `${e.clientX - rect.left}px`;
+      circle.style.top = `${e.clientY - rect.top}px`;
+      circle.style.width = circle.style.height = '0px';
+      circle.style.borderRadius = '9999px';
+      circle.style.background = 'currentColor';
+      circle.style.opacity = '.12';
+      circle.style.transform = 'translate(-50%,-50%)';
+      circle.style.transition = 'width .5s ease, height .5s ease, opacity .8s ease';
+      b.appendChild(circle);
+      requestAnimationFrame(() => { circle.style.width = circle.style.height = Math.max(rect.width, rect.height) * 1.8 + 'px'; });
+      setTimeout(() => { circle.style.opacity = '0'; setTimeout(() => circle.remove(), 300); }, 250);
+    }, true);
+
+    // ===== Theme (shared manager) =====
+    (function initSharedTheme() {
+      function applyThemeButton(mode) {
+        const nextLabel = mode === 'dark' ? 'Light' : 'Dark';
+        if ($themeText) {
+          $themeText.textContent = nextLabel;
+        } else if ($themeBtn) {
+          // Fallback for older markup
+          $themeBtn.textContent = nextLabel;
+        }
+        if ($themeIcon) {
+          // Show the action (what clicking will switch to)
+          $themeIcon.textContent = mode === 'dark' ? 'light_mode' : 'dark_mode';
+        }
+      }
+      try {
+        // Ensure global Theme is initialized (config.js handles apply + data-theme)
+        if (window.Theme && typeof window.Theme.init === 'function') window.Theme.init();
+        const mode = (window.Theme && window.Theme.get && window.Theme.get()) || (document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+        applyThemeButton(mode);
+      } catch { }
+      $themeBtn.addEventListener('click', () => {
+        try {
+          const mode = (window.Theme && window.Theme.toggle && window.Theme.toggle()) || (document.documentElement.classList.toggle('dark'), document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+          applyThemeButton(mode);
+        } catch { }
+      });
+    })();
+
+    // ===== Density Toggle =====
+    function setDensity(on) {
+      dense = on;
+      document.body.classList.toggle('!text-[0.95rem]', on);
+      Array.from(document.querySelectorAll('input,button,textarea,.chip')).forEach(el => {
+        el.classList.toggle('!py-2', on);
+        el.classList.toggle('!py-3', !on);
+      });
+    }
+    if ($densityBtn) {
+      $densityBtn.addEventListener('click', () => setDensity(!dense));
+    }
+
+    // ===== Helpers =====
+    function snack(msg) {
+      $snack.textContent = msg;
+      $snack.classList.remove('hidden');
+      setTimeout(() => $snack.classList.add('hidden'), 1500);
+    }
+
+    function setEmphasis(on) {
+      emphasis = on;
+      if ($wrap) $wrap.classList.toggle('emph-strong', on);
+      localStorage.setItem('paperx:emphasis', on ? '1' : '0');
+      // visual state on button
+      if ($emphBtn) {
+        $emphBtn.classList.toggle('bg-[var(--brand-soft)]', on);
+        $emphBtn.textContent = on ? 'Emphasis On' : 'Emphasis';
+      }
+    }
+
+    function logEvent(title, detail = '') {
+      try { console.debug('[Status]', title, detail || ''); } catch { }
+    }
+
+    function setBusy(b) {
+      if ($generate) $generate.disabled = b;
+      if ($cancel) $cancel.disabled = !b;
+      if ($topic) $topic.disabled = b;
+      if ($regen) $regen.disabled = b;
+      if ($regenMobile) $regenMobile.disabled = b;
+    }
+
+    // Loader controls scoped to the Final Output answer box
+    function showOutputLoader() {
+      ensureLottie();
+      if ($outputLoader) $outputLoader.style.display = 'flex';
+      if ($wrap) $wrap.classList.add('loading');
+    }
+    function hideOutputLoader() {
+      if ($outputLoader) $outputLoader.style.display = 'none';
+      if ($wrap) $wrap.classList.remove('loading');
+    }
+
+    function postprocessLinks() {
+      $output.querySelectorAll('a[href]').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
+    }
+
+    function buildTOC() {
+      if (!$toc) return;
+      $toc.innerHTML = '';
+      const hs = $output.querySelectorAll('h1, h2, h3');
+      hs.forEach(h => {
+        const level = h.tagName === 'H1' ? 1 : (h.tagName === 'H2' ? 2 : 3);
+        const id = h.id || h.textContent.trim().toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
+        h.id = id;
+        const a = document.createElement('a');
+        a.href = `#${id}`;
+        a.textContent = h.textContent;
+        a.className = `${level > 1 ? 'ml-3' : ''} block px-2 py-1 rounded hover:bg-[var(--brand-soft)]`;
+        $toc.appendChild(a);
+      });
+    }
+
+    async function renderMarkdown(md) {
+      lastMarkdown = md ?? '';
+      try {
+        await ensureMarkdownRuntime();
+      } catch (err) {
+        console.warn('Markdown runtime failed to load', err);
+        $output.textContent = lastMarkdown;
+        $editor.value = lastMarkdown;
+        return;
+      }
+      const html = DOMPurify.sanitize(marked.parse(lastMarkdown));
+      $output.innerHTML = html;
+      $editor.value = lastMarkdown;
+
+      // Track note view if we have content
+      if (lastMarkdown && lastMarkdown.length > 50 && window.Analytics) {
+        // Debounce or just track? Since renderMarkdown might be called multiple times during streaming/editing, 
+        // we might want to be careful. But for now, assuming it's final render or major update.
+        // Actually, let's track only if it seems substantial.
+        window.Analytics.track('note_viewed', {
+          variant: currentVariant || 'detailed',
+          word_count: lastMarkdown.split(/\s+/).length
+        });
+      }
+
+      // Mermaid blocks
+      const mmd = Array.from($output.querySelectorAll('code.language-mermaid, pre code.language-mermaid'));
+      for (let i = 0; i < mmd.length; i += 1) {
+        const codeEl = mmd[i];
+        const txt = codeEl.textContent;
+        const pre = codeEl.closest('pre');
+        const container = document.createElement('div');
+        container.className = 'my-4';
+        (pre || codeEl).replaceWith(container);
+        try {
+          const rendered = await mermaid.render('mmd-' + i + '-' + Date.now(), txt || '');
+          container.innerHTML = (rendered && rendered.svg) ? rendered.svg : '';
+        } catch { }
+      }
+
+      // Syntax highlight
+      try { hljs.highlightAll(); } catch { }
+
+      // Math (KaTeX auto-render): support $...$, $$...$$, \(...\), \[...\]
+      try {
+        if (typeof renderMathInElement === 'function') {
+          renderMathInElement($output, {
+            delimiters: [
+              { left: '$$', right: '$$', display: true },
+              { left: '$', right: '$', display: false },
+              { left: '\\(', right: '\\)', display: false },
+              { left: '\\[', right: '\\]', display: true }
+            ],
+            throwOnError: false,
+            ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+          });
+        }
+      } catch { }
+
+      // Transform inline [LABEL] citations into pills with favicons
+      try { applyCitationPills(); } catch { }
+
+      // Render CITATIONS section as one-line clickable list
+      try { renderCitationsSection(); } catch { }
+
+      postprocessLinks();
+      buildTOC();
+      // Update 'My note' visibility when content/title changes
+      checkMyNoteVisibility();
+    }
+
+    function clearUI() {
+      if ($images) $images.innerHTML = '';
+      if ($output) $output.innerHTML = '';
+      if ($toc) $toc.innerHTML = '';
+      if ($progress) $progress.style.width = '0%';
+      resetFlashcardAccess();
+      resetMCQAccess();
+      currentNoteId = '';
+      lastImageUrls = [];
+      // reset images skeleton (keep for images only)
+      ['', '', ''].forEach(() => {
+        const sk = document.createElement('div');
+        sk.className = 'h-24 rounded-lg skeleton';
+        $images.appendChild(sk);
+      });
+    }
+
+    function renderImageGallery(urls) {
+      if (!$images) return;
+      const listRaw = Array.isArray(urls) ? urls.map(u => String(u || '').trim()).filter(u => !!u) : [];
+      const list = Array.from(new Set(listRaw));
+      lastImageUrls = list;
+      $images.innerHTML = '';
+      if (!list.length) return;
+      list.slice(0, 9).forEach(url => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = 'reference image';
+        img.className = 'w-full h-24 object-cover rounded-lg border';
+        img.style.borderColor = 'var(--outline)';
+        a.appendChild(img);
+        $images.appendChild(a);
+      });
+    }
+
+    function setProgress(stage) {
+      const map = {
+        start: 5, search_results: 20, fetch_start: 28, fetch_done: 46, merged_titles: 58,
+        context_ready: 66, llm_start: 72, llm_done: 88, images: 94, final: 100
+      };
+      const v = map[stage] ?? 0;
+      if ($progress) $progress.style.width = v + '%';
+      document.querySelectorAll('.step').forEach(el => {
+        el.classList.toggle('text-brand-700', el.dataset.step === stage);
+      });
+    }
+
+    function normalizeCourseType(type) {
+      const v = (type || '').trim().toLowerCase();
+      return ['practical', 'theorey', 'maths'].includes(v) ? v : '';
+    }
+
+    function ensureWorkingSection(md, topic, courseType) {
+      if (normalizeCourseType(courseType) !== 'practical') return md || '';
+      const text = md || '';
+      if (/^##\s*working\b/imu.test(text)) return text;
+      const trimmed = text.trim();
+      const working = [
+        '## Working',
+        `1. Prepare the required setup and apparatus for ${topic || 'this experiment'}.`,
+        '2. Configure the environment and verify all safety constraints.',
+        '3. Execute each step of the procedure methodically, capturing observations.',
+        '4. Record measurements/results with units after every key action.',
+        '5. Analyze the observations to derive the outcome, then clean up the setup.',
+      ].join('\n');
+      if (!trimmed) return working + '\n';
+      return `${trimmed}\n\n${working}\n`;
+    }
+
+    async function fetchCourseTypeForTopic(topic) {
+      const clean = (topic || '').trim();
+      if (!clean) return '';
+      try {
+        const res = await fetch(`${apiBase}/api/syllabus/topics/by-title?topic=${encodeURIComponent(clean)}`);
+        if (!res.ok) return '';
+        const data = await res.json();
+        if (!Array.isArray(data) || !data.length) return '';
+        const match = data.find(t => t && t.course_type) || data[0];
+        return normalizeCourseType(match && match.course_type);
+      } catch (err) {
+        console.warn('Course type lookup failed', err);
+        return '';
+      }
+    }
+
+    // ===== Streaming events =====
+    const _cancelBtn = document.getElementById('cancelBtn');
+    if (_cancelBtn) _cancelBtn.addEventListener('click', () => {
+      if (es) { es.close(); es = null; logEvent('Cancelled'); }
+      hideOutputLoader();
+      setBusy(false);
+    });
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function fetchJsonWithTimeout(url, { timeoutMs = 8000 } = {}) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        let data = null;
+        try { data = await res.json(); } catch { }
+        return { ok: res.ok, status: res.status, data };
+      } catch (err) {
+        return { ok: false, status: 0, data: null, error: err };
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    async function fetchJsonWithRetry(url, { timeoutMs = 8000, attempts = 3 } = {}) {
+      let last = null;
+      for (let i = 0; i < attempts; i++) {
+        const r = await fetchJsonWithTimeout(url, { timeoutMs });
+        last = r;
+        // 200/404 are definitive for our purposes.
+        if (r.status === 200 || r.status === 404) return r;
+        // Retry on network/timeout and server errors.
+        if (r.status === 0 || r.status >= 500) {
+          await sleep(250 * (i + 1));
+          continue;
+        }
+        // Other 4xx (401/403/429) are not definitive for existence.
+        return r;
+      }
+      return last || { ok: false, status: 0, data: null };
+    }
+
+    // Unified generator: supports force to bypass cache
+    async function startGeneration(topic, force = false) {
+      const t = (topic || '').trim();
+      if (!t) { alert('Enter a topic'); return; }
+      loadRelatedVideos(t, { force: true });
+      if (es) { try { es.close(); } catch { } es = null; }
+      // DB-first behavior: only generate when we are definitively sure it doesn't exist.
+      if (!force) {
+        setBusy(true);
+        showOutputLoader();
+        const resolveUrl = `${apiBase}/api/notes/resolve?title=${encodeURIComponent(t)}&variant=${encodeURIComponent(currentVariant)}`;
+        const check = await fetchJsonWithRetry(resolveUrl, { timeoutMs: 8000, attempts: 3 });
+        if (check.status === 200 && check.data && check.data.markdown) {
+          clearUI();
+          renderMarkdown(check.data.markdown);
+          renderImageGallery(check.data.image_urls || []);
+          setEmphasis(emphasis);
+          currentNoteId = check.data.id || '';
+          try {
+            if (currentNoteId) {
+              localStorage.setItem(noteKey(currentVariant), currentNoteId);
+              if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
+            }
+          } catch { }
+
+          if (currentNoteId) {
+            enableFlashcardAccess(currentNoteId, (check.data.title || t).trim());
+            enableMCQAccess(currentNoteId, (check.data.title || t).trim());
+          }
+          hideOutputLoader();
+          setBusy(false);
+          return;
+        }
+        if (check.status !== 404) {
+          // Not definitive -> do not generate.
+          console.warn('[Generate] DB check not definitive; refusing to generate', check);
+          hideOutputLoader();
+          setBusy(false);
+          snack('Unable to confirm in DB. Try again.');
+          return;
+        }
+        // check.status === 404 => definitively missing; proceed to generation.
+      }
+
+      clearUI();
+      setBusy(true);
+      showOutputLoader();
+      currentCourseType = '';
+      try {
+        currentCourseType = await fetchCourseTypeForTopic(t);
+      } catch (err) {
+        console.warn('Course type lookup error', err);
+      }
+      // Pre-fetch allowed domains for degree (mirrors notes_generator.html)
+      const degree = getSelectedDegree();
+      let allowedDomains = [];
+      if (degree) {
+        try {
+          const domainsRes = await fetch(`${apiBase}/api/notes/allowed-domains?degree=${encodeURIComponent(degree)}`);
+          if (domainsRes.ok) {
+            const domainsData = await domainsRes.json();
+            allowedDomains = (domainsData && Array.isArray(domainsData.domains)) ? domainsData.domains : [];
+            console.log(`[MedicalNotes] Allowed domains for "${degree}":`, allowedDomains);
+          }
+        } catch (err) {
+          console.warn('[MedicalNotes] Allowed domains fetch failed:', err);
+        }
+      }
+
+      const url = new URL(`${apiBase}/generate/stream`);
+      url.searchParams.set('topic', t);
+      if (force) url.searchParams.set('force', 'true');
+      url.searchParams.set('variant', currentVariant);
+      if (degree) url.searchParams.set('degree', degree);
+      if (currentCourseType) url.searchParams.set('course_type', currentCourseType);
+      if (allowedDomains.length) url.searchParams.set('allowed_urls', allowedDomains.join(','));
+      es = new EventSource(url.toString(), { withCredentials: true });
+
+      es.addEventListener('open', () => { logEvent('Connected'); setProgress('start'); });
+      es.addEventListener('error', () => { logEvent('Stream error'); hideOutputLoader(); setBusy(false); snack('Generation failed – try again'); es && es.close(); es = null; });
+      es.addEventListener('close', () => { hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
+
+      const on = (name, fn) => es.addEventListener(name, (ev) => { try { fn(JSON.parse(ev.data)); setProgress(name); } catch { } });
+
+      on('start', (d) => {
+        const allowed = Array.isArray(d.allowed_domains) ? d.allowed_domains : [];
+        logEvent('Start', `Allowed: ${allowed.join(', ')}`);
+      });
+      on('search_results', (d) => logEvent('Searching', `${d.urls.length} results`));
+      on('fetch_start', (d) => logEvent('Fetching', d.url));
+      on('fetch_done', (d) => logEvent('Parsed', `${d.title} (${d.sections} sections)`));
+      on('fetch_error', (d) => logEvent('Fetch error', d.error));
+      on('merged_titles', (d) => logEvent('Merged titles', `${d.titles.length} unique`));
+      on('context_ready', (d) => logEvent('Context ready', `${d.chars} chars`));
+      on('llm_start', () => logEvent('LLM generating…'));
+      on('llm_done', (d) => logEvent('LLM done', `${d.md_chars} chars`));
+      on('images', (d) => {
+        logEvent('Images', `${d.count} found`);
+        renderImageGallery(d.image_urls || d.urls || []);
+      });
+      on('error', (d) => { logEvent('Error', d.message); hideOutputLoader(); setBusy(false); snack(d.message || 'Generation failed'); es && es.close(); es = null; });
+      on('final', (d) => {
+        renderImageGallery(d.image_urls || d.urls || lastImageUrls);
+        const workingTopic = (d.title || d.topic || t);
+        const mdToRender = ensureWorkingSection(d.markdown, workingTopic, currentCourseType);
+        renderMarkdown(mdToRender);
+        setEmphasis(emphasis);
+        hideOutputLoader();
+        if (d.id) {
+          currentNoteId = d.id;
+          try {
+            localStorage.setItem(noteKey(currentVariant), currentNoteId);
+            if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
+          } catch { }
+        }
+        const detectedTopic = (() => {
+          const fromHeading = (document.querySelector('#output h1')?.textContent || '').trim();
+          if (fromHeading) return fromHeading;
+          const fromPayload = (d.title || d.topic || '').trim();
+          if (fromPayload) return fromPayload;
+          const fromInput = ($topic ? $topic.value : '').trim();
+          if (fromInput) return fromInput;
+          return relatedVideosTopic || '';
+        })();
+        if (currentNoteId) {
+          enableFlashcardAccess(currentNoteId, detectedTopic);
+          enableMCQAccess(currentNoteId, detectedTopic);
+        }
+        logEvent('Complete');
+        setBusy(false); es && es.close(); es = null;
+      });
+    }
+
+    // Regenerate from current topic or rendered H1 (force=true)
+    if ($regen) $regen.addEventListener('click', () => {
+      const fromTitle = (document.querySelector('#output h1')?.textContent || '').trim();
+      const t = (($topic ? $topic.value : '') || fromTitle).trim();
+      if (!t) { snack('No topic to regenerate'); return; }
+      if ($topic) $topic.value = t;
+      startGeneration(t, true);
+    });
+    if ($regenMobile) {
+      $regenMobile.addEventListener('click', (e) => {
+        e.preventDefault();
+        if ($regen && !$regen.disabled) {
+          $regen.click();
+        } else {
+          const fromTitle = (document.querySelector('#output h1')?.textContent || '').trim();
+          const t = ($topic.value || fromTitle).trim();
+          if (!t) { alert('Enter a topic'); return; }
+          $topic.value = t;
+          startGeneration(t, true);
+        }
+      });
+    }
+
+    const _genBtn = document.getElementById('generateBtn');
+    if (_genBtn) _genBtn.addEventListener('click', () => {
+      const topic = ($topic ? $topic.value : '').trim();
+      console.log('[Generate] clicked topic:', topic, 'variant:', currentVariant);
+      startGeneration(topic, false);
+    });
+
+    // ===== Toolbar actions =====
+    if ($copy) $copy.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(lastMarkdown || ''); snack('Copied markdown'); }
+      catch { snack('Copy failed'); }
+    });
+
+    if ($download) $download.addEventListener('click', async () => {
+      try {
+        if (currentNoteId) {
+          const res = await fetch(`${apiBase}/notes/${encodeURIComponent(currentNoteId)}/pdf`);
+          if (!res.ok) throw new Error('PDF request failed');
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = `${currentNoteId}.pdf`;
+          document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+          return;
+        }
+        // No note id yet — ad-hoc PDF from current content
+        const title = (document.querySelector('#output h1')?.textContent || 'notes').trim();
+        const res = await fetch(`${apiBase}/pdf`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, markdown: lastMarkdown || '' })
+        });
+        if (!res.ok) throw new Error('PDF request failed');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `${(title || 'notes').toLowerCase().replace(/[^a-z0-9_.-]+/g, '_')}.pdf`;
+        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error(e);
+        snack('PDF download failed');
+      }
+    });
+
+    function setFullscreen(on) {
+      if (!$wrap) return;
+
+      const classes = ['fixed', 'inset-0', 'z-50', 'bg-[var(--surface)]', 'overflow-auto', 'px-8', 'md:px-48', 'pt-16', 'pb-8'];
+      classes.forEach(c => $wrap.classList.toggle(c, on));
+      if ($expand) $expand.textContent = on ? 'Exit' : 'Fullscreen';
+      if ($fsCtrl) $fsCtrl.classList.toggle('hidden', !on);
+
+      // Browser Fullscreen API - Use element requestFullscreen for strict isolation
+      try {
+        if (on) {
+          if (!document.fullscreenElement) {
+            // Request fullscreen on the wrapper element itself
+            $wrap.requestFullscreen().catch(err => {
+              console.warn(`Error attempting to enable fullscreen: ${err.message}`);
+            });
+          }
+        } else {
+          if (document.fullscreenElement) {
+            document.exitFullscreen().catch(err => {
+              console.warn(`Error attempting to exit fullscreen: ${err.message}`);
+            });
+          }
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    if ($expand) {
+      $expand.addEventListener('click', () => {
+        if (!$wrap) return;
+        const isCurrentlyFullscreen = $wrap.classList.contains('fixed');
+        setFullscreen(!isCurrentlyFullscreen);
+      });
+    }
+
+    if ($fsExit) {
+      $fsExit.addEventListener('click', () => setFullscreen(false));
+    }
+
+    if ($fsTheme) {
+      $fsTheme.addEventListener('click', () => {
+        if ($themeBtn) $themeBtn.click();
+      });
+    }
+
+    // Sync with browser fullscreen changes (e.g. user presses Esc)
+    document.addEventListener('fullscreenchange', () => {
+      const isBrowserFullscreen = !!document.fullscreenElement;
+      // If browser exited fullscreen but UI is still in fullscreen mode, we need to exit UI mode too
+      if (!isBrowserFullscreen && $wrap && $wrap.classList.contains('fixed')) {
+        // We only want to update UI, not call exitFullscreen again (it would fail)
+        const classes = ['fixed', 'inset-0', 'z-50', 'bg-[var(--surface)]', 'overflow-auto', 'px-8', 'md:px-48', 'pt-16', 'pb-8'];
+        classes.forEach(c => $wrap.classList.toggle(c, false));
+        if ($expand) $expand.textContent = 'Fullscreen';
+        if ($fsCtrl) $fsCtrl.classList.add('hidden');
+      }
+    });
+
+    // Emphasis toggle
+    setEmphasis(emphasis);
+    if ($emphBtn) {
+      $emphBtn.addEventListener('click', () => setEmphasis(!emphasis));
+    }
+
+    // Toggle ytTools visibility when Related Videos details is toggled
+    (function () {
+      const ytDetails = document.getElementById('ytDetails');
+      const ytTools = document.getElementById('ytTools');
+      if (ytDetails && ytTools) {
+        function syncToolsVisibility() {
+          ytTools.style.display = ytDetails.open ? 'flex' : 'none';
+        }
+        syncToolsVisibility();
+        ytDetails.addEventListener('toggle', syncToolsVisibility);
+      }
+    })();
+
+    // Admin Regenerate Button Click Logic
+    const $adminRegenBtn = document.getElementById('adminRegenBtn');
+    if ($adminRegenBtn) {
+      $adminRegenBtn.addEventListener('click', () => {
+        const t = currentTopicOrHeading();
+        if (!t) {
+          try { if (typeof snack === 'function') snack('No topic to regenerate'); } catch { }
+          return;
+        }
+        startGeneration(t, true);
+      });
+    }
+
+    // ===== Citations: parser + transformer =====
+    function parseCitationsFromMarkdown(mdText) {
+      const map = {};
+      if (!mdText) return map;
+      const secMatch = mdText.match(/^##\s*CITATIONS\b[\s\S]*$/im);
+      if (!secMatch) return map;
+      const startIdx = secMatch.index || 0;
+      // find next section header after CITATIONS
+      const after = mdText.slice(startIdx + secMatch[0].split('\n')[0].length);
+      const nextHeaderIdx = after.search(/^##\s+/m);
+      const secBody = nextHeaderIdx >= 0 ? after.slice(0, nextHeaderIdx) : after;
+      // Patterns: "- [LABEL]: URL", "- [LABEL] - URL", or "- LABEL: URL"
+      const lines = secBody.split(/\n+/);
+      const urlRe = /(https?:\/\/[^\s)\]]+)/i;
+      for (const line of lines) {
+        const m1 = line.match(/\[\s*([A-Za-z0-9_-]{2,20})\s*\][^\n]*?(https?:\/\/[^\s)\]]+)/i);
+        if (m1) { map[m1[1].trim()] = m1[2].trim(); continue; }
+        const m2 = line.match(/^\s*[-*]?\s*([A-Za-z0-9_-]{2,20})\s*[:\-–—]\s*(https?:\/\/\S+)/i);
+        if (m2) { map[m2[1].trim()] = m2[2].trim(); continue; }
+        const m3 = line.match(urlRe);
+        if (m3) {
+          // try to infer label from domain if missing explicit label
+          try {
+            const u = new URL(m3[1]);
+            const host = u.hostname.replace(/^www\./, '');
+            const guess = host.split('.')[0];
+            if (guess && !map[guess]) map[guess] = m3[1];
+          } catch { }
+        }
+      }
+      return map;
+    }
+
+    function applyCitationPills() {
+      const citations = parseCitationsFromMarkdown(lastMarkdown || '');
+      const labels = Object.keys(citations);
+      if (!labels.length) return;
+
+      // Mark all nodes inside the CITATIONS section to exclude from transform
+      const h2s = $output.querySelectorAll('h2');
+      let citationsMarked = false;
+      for (const h of h2s) {
+        if ((h.textContent || '').trim().toUpperCase() === 'CITATIONS') {
+          // mark the heading as part of citations section
+          if (h.nodeType === 1) h.setAttribute('data-citations-section', '1');
+          let cur = h.nextSibling;
+          while (cur) {
+            if (cur.nodeType === 1 && /^(H1|H2)$/i.test(cur.nodeName)) break;
+            if (cur.nodeType === 1) {
+              cur.setAttribute('data-citations-section', '1');
+            }
+            cur = cur.nextSibling;
+          }
+          citationsMarked = true;
+          break;
+        }
+      }
+
+      const isInExcluded = (node) => {
+        if (!node) return false;
+        let n = node.parentNode;
+        while (n && n !== $output) {
+          if (n.nodeType === 1) {
+            if (n.hasAttribute && n.hasAttribute('data-citations-section')) return true;
+            const tag = n.nodeName;
+            if (tag === 'PRE' || tag === 'CODE' || tag === 'SCRIPT' || tag === 'STYLE' || tag === 'A') return true;
+          }
+          n = n.parentNode;
+        }
+        return false;
+      };
+
+      const pattern = /\[([^\[\]]+)\]/g; // [GFG] or [GFG, TP]
+      const walker = document.createTreeWalker($output, NodeFilter.SHOW_TEXT);
+      const toProcess = [];
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        if (!node.nodeValue || node.nodeValue.indexOf('[') === -1) continue;
+        if (isInExcluded(node)) continue;
+        toProcess.push(node);
+      }
+
+      toProcess.forEach(node => {
+        const text = node.nodeValue;
+        pattern.lastIndex = 0;
+        let m;
+        let lastIdx = 0;
+        let replaced = false;
+        const frag = document.createDocumentFragment();
+
+        while ((m = pattern.exec(text))) {
+          const inside = m[1];
+          const tokens = inside.split(',').map(s => s.trim()).filter(Boolean);
+          const valid = tokens.filter(t => citations[t]);
+          if (!valid.length) continue;
+          // prepend text before match
+          if (m.index > lastIdx) frag.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
+          // add pills for each valid label
+          valid.forEach((lab, idx) => {
+            const href = citations[lab];
+            let host = '';
+            try { host = new URL(href).hostname.replace(/^www\./, ''); } catch { }
+            const a = document.createElement('a');
+            if (href) a.href = href;
+            a.target = '_blank'; a.rel = 'noopener';
+            a.className = 'citation-pill';
+            a.title = href || '';
+            const img = document.createElement('img');
+            img.alt = '';
+            img.loading = 'lazy';
+            img.referrerPolicy = 'no-referrer';
+            img.src = host ? `https://www.google.com/s2/favicons?domain=${host}&sz=32` : '';
+            a.appendChild(img);
+            const span = document.createElement('span');
+            span.textContent = lab;
+            a.appendChild(span);
+            frag.appendChild(a);
+            if (idx !== valid.length - 1) frag.appendChild(document.createTextNode(' '));
+          });
+          lastIdx = pattern.lastIndex;
+          replaced = true;
+        }
+        if (replaced) {
+          if (lastIdx < text.length) frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+          node.parentNode.replaceChild(frag, node);
+        }
+      });
+    }
+
+    function renderCitationsSection() {
+      const citations = parseCitationsFromMarkdown(lastMarkdown || '');
+      const labels = Object.keys(citations);
+      if (!labels.length) return;
+
+      const h2s = $output.querySelectorAll('h2');
+      let h2 = null;
+      for (const h of h2s) {
+        if ((h.textContent || '').trim().toUpperCase() === 'CITATIONS') { h2 = h; break; }
+      }
+      if (!h2) return;
+
+      // Remove existing section content (list/paragraphs) until next H1/H2
+      let cur = h2.nextSibling;
+      const toRemove = [];
+      while (cur) {
+        if (cur.nodeType === 1 && /^(H1|H2)$/i.test(cur.nodeName)) break;
+        toRemove.push(cur);
+        cur = cur.nextSibling;
+      }
+      toRemove.forEach(n => n.parentNode && n.parentNode.removeChild(n));
+
+      // Build our one-line list
+      const wrap = document.createElement('div');
+      wrap.className = 'citations-list';
+
+      labels.forEach(lab => {
+        const href = citations[lab];
+        const a = document.createElement('a');
+        a.className = 'citation-item';
+        a.href = href;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.title = href;
+        // Visible text: LABEL — URL
+        a.textContent = `${lab} — ${href}`;
+        wrap.appendChild(a);
+      });
+
+      h2.insertAdjacentElement('afterend', wrap);
+    }
+
+    let queryTopic = (() => {
+      try { return new URLSearchParams(window.location.search).get('topic')?.trim() || ''; }
+      catch { return ''; }
+    })();
+
+    // Load last note on open (persistence)
+    (async function loadLastNote() {
+      if (queryTopic) return;
+      const id = (localStorage.getItem(noteKey(currentVariant)) || (currentVariant === 'detailed' ? localStorage.getItem('paperx:lastNoteId') : '')); if (!id) return;
+      try {
+        const res = await fetch(`${apiBase}/notes/${encodeURIComponent(id)}?variant=${encodeURIComponent(currentVariant)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.markdown) {
+          renderMarkdown(data.markdown);
+          renderImageGallery(data.image_urls || []);
+          $meta.textContent = `Loaded • ${id} • ${currentVariant}`;
+          currentNoteId = data?.id || id;
+          const derivedTopic = (
+            (data?.title || '')
+            || (document.querySelector('#output h1')?.textContent || '')
+            || storedTopic
+            || ($topic.value || '')
+          ).trim();
+          if (currentNoteId) {
+            enableFlashcardAccess(currentNoteId, derivedTopic);
+            enableMCQAccess(currentNoteId, derivedTopic);
+          }
+        }
+      } catch { }
+    })();
+
+    // URL topic (?topic=...) is handled by the variant switch handler
+    // which fires on DOMContentLoaded via $variantDetailed.click().
+    // It reads the URL, resolves/generates the topic, and loads videos.
+
+    // Edit / Save
+    function setEditMode(on) {
+      $output.classList.toggle('hidden', on);
+      $editor.classList.toggle('hidden', !on);
+      $save.classList.toggle('hidden', !on);
+      if (typeof $editToggle !== 'undefined' && $editToggle) {
+        $editToggle.textContent = on ? 'Preview' : 'Edit';
+      }
+      if (on) {
+        $editor.value = lastMarkdown;
+        requestAnimationFrame(() => {
+          if ($editor && typeof $editor.focus === 'function') {
+            try {
+              $editor.focus({ preventScroll: true });
+            } catch (err) {
+              $editor.focus();
+            }
+          }
+        });
+      } else {
+        renderMarkdown($editor.value);
+      }
+    }
+    let isEditing = false;
+    if (typeof $editToggle !== 'undefined' && $editToggle) {
+      $editToggle.addEventListener('click', () => {
+        const hasMarkdown = !!(lastMarkdown && lastMarkdown.trim());
+        if (!hasMarkdown) { snack('Generate notes first'); return; }
+        isEditing = !isEditing;
+        setEditMode(isEditing);
+      });
+    }
+    $save.addEventListener('click', async () => {
+      const md = $editor.value || '';
+      if (!currentNoteId) {
+        const topic = (document.querySelector('#output h1')?.textContent || $topic.value || 'Untitled').trim();
+        const res = await fetch(`${apiBase}/notes?variant=${encodeURIComponent(currentVariant)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic, markdown: md, image_urls: lastImageUrls })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          currentNoteId = data.id;
+          try {
+            localStorage.setItem(noteKey(currentVariant), currentNoteId);
+            if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
+          } catch { }
+          $meta.textContent = `Saved • ${currentNoteId} • ${currentVariant}`;
+          renderImageGallery(data.image_urls || lastImageUrls);
+          renderMarkdown(md);
+          isEditing = false; setEditMode(false);
+          logEvent('Saved', currentNoteId);
+          snack('Saved');
+        } else { logEvent('Save failed'); snack('Save failed'); }
+        return;
+      }
+      const res = await fetch(`${apiBase}/notes/${encodeURIComponent(currentNoteId)}?variant=${encodeURIComponent(currentVariant)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markdown: md, image_urls: lastImageUrls })
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        renderImageGallery((data && data.image_urls) || lastImageUrls);
+        renderMarkdown(md);
+        isEditing = false; setEditMode(false);
+        $meta.textContent = `Saved • ${currentNoteId} • ${currentVariant}`;
+        logEvent('Saved', currentNoteId);
+        snack('Saved');
+      } else { logEvent('Save failed'); snack('Save failed'); }
+    });

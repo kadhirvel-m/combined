@@ -112,7 +112,7 @@ export function VideoCard({ video, fallbacks }: { video: RelatedVideo; fallbacks
         />
         {video.duration ? <span className={styles.ytDuration}>{video.duration}</span> : null}
         {video.recommended ? (
-          <span className="absolute left-2 top-2 z-[1] inline-flex items-center gap-1 rounded-full bg-brand-600 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white">
+          <span className="absolute left-2 top-2 z-[1] inline-flex items-center gap-1 rounded-full bg-brand-600 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white shadow-[0_10px_26px_rgba(15,23,42,0.45)]">
             <span className="text-[15px] leading-none" style={{ color: "#FBBF24" }}>
               {"★"}
             </span>

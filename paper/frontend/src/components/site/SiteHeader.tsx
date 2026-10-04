@@ -27,8 +27,21 @@ export interface SiteHeaderProps {
   projectsMenu?: boolean;
   /** Links for the mobile drawer (defaults to the site-wide list). */
   mobileLinks?: NavLink[];
-  /** Extra controls rendered before the theme toggle (page-specific actions). */
+  /** Extra controls rendered next to the theme toggle (page-specific actions). */
   actions?: ReactNode;
+  /** Where `actions` sit relative to the theme toggle (default before). */
+  actionsPosition?: "before-theme" | "after-theme";
+  /**
+   * Custom content for the right side of the mobile bar, replacing the default
+   * theme toggle + menu button (e.g. search/edit buttons on app pages that have
+   * no drawer). Include `<ThemeToggle compact />` yourself if the page needs it.
+   */
+  mobileBar?: ReactNode;
+  /**
+   * Signed-in buttons for the mobile drawer, shown between the profile link and
+   * Sign out (e.g. the profile page's "Devices"). The drawer closes on click.
+   */
+  mobileAccountActions?: MobileAccountAction[];
   /** `sticky` (default) stays in flow; `fixed` overlays the top of the page. */
   position?: "sticky" | "fixed";
   /** Hide login/signup/profile controls (e.g. on the login page itself). */
@@ -37,6 +50,12 @@ export interface SiteHeaderProps {
   className?: string;
   /** Container width class (default Tailwind `container`). */
   containerClassName?: string;
+}
+
+export interface MobileAccountAction {
+  label: string;
+  icon: string;
+  onClick: () => void;
 }
 
 const pill = "inline-flex items-center rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 transition";
@@ -50,6 +69,9 @@ export function SiteHeader({
   projectsMenu = variant === "marketing",
   mobileLinks = MOBILE_NAV,
   actions,
+  actionsPosition = "before-theme",
+  mobileBar,
+  mobileAccountActions,
   position = "sticky",
   hideAuth,
   className,
@@ -120,8 +142,9 @@ export function SiteHeader({
           </nav>
 
           <div className="hidden md:flex items-center gap-2">
-            {actions}
+            {actionsPosition === "before-theme" ? actions : null}
             <ThemeToggle labelClassName={app ? "hidden lg:block" : undefined} />
+            {actionsPosition === "after-theme" ? actions : null}
             {hideAuth ? null : signedIn ? (
               <>
                 <AppLink
@@ -160,7 +183,9 @@ export function SiteHeader({
             ) : null}
           </div>
 
-          {mobileMenu ? (
+          {mobileBar ? (
+            <div className="md:hidden flex items-center gap-2">{mobileBar}</div>
+          ) : mobileMenu ? (
             <div className="md:hidden flex items-center gap-2">
               <ThemeToggle compact />
               <button
@@ -179,8 +204,8 @@ export function SiteHeader({
         </div>
       </header>
 
-      {/* Mobile navigation drawer */}
-      {mobileMenu ? (
+      {/* Mobile navigation drawer (its toggle is replaced when a page passes `mobileBar`) */}
+      {mobileMenu && !mobileBar ? (
         <>
           <div
             aria-hidden="true"
@@ -228,6 +253,21 @@ export function SiteHeader({
                         {session.displayName !== "Profile" ? `Hi, ${session.displayName.split(/\s+/)[0]}` : "My profile"}
                       </span>
                     </AppLink>
+                    {mobileAccountActions?.map((a) => (
+                      <button
+                        key={a.label}
+                        type="button"
+                        tabIndex={mobileOpen ? 0 : -1}
+                        onClick={() => {
+                          closeMobile();
+                          a.onClick();
+                        }}
+                        className="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 transition"
+                      >
+                        <Icon name={a.icon} className="text-base" />
+                        <span>{a.label}</span>
+                      </button>
+                    ))}
                     <button
                       type="button"
                       tabIndex={mobileOpen ? 0 : -1}

@@ -54,6 +54,9 @@ for (const file of process.argv.slice(2)) {
   collect(parse(src), classes, inlineCss);
   // Classes written inside scripts/templates (rendered later by JS).
   for (const m of src.matchAll(/class(?:Name)?\s*=\s*["'`]([^"'`]+)["'`]/g)) for (const c of m[1].split(/\s+/)) if (c && !c.includes("$")) classes.add(c);
+  // Classes toggled by scripts: el.classList.add('ring-2', 'ring-red-500') etc.
+  for (const m of src.matchAll(/classList\.(?:add|remove|toggle|replace)\(([^)]*)\)/g))
+    for (const q of m[1].matchAll(/["'`]([^"'`]+)["'`]/g)) for (const c of q[1].split(/\s+/)) if (c && !c.includes("$")) classes.add(c);
   const pageCss = inlineCss.join("\n");
   const pageDefined = new Set([...pageCss.matchAll(CLASS_TOKEN)].map((m) => unescapeIdent(m[1])));
 
@@ -67,7 +70,7 @@ for (const file of process.argv.slice(2)) {
   // bracket value, a slash opacity, or a known utility stem.
   const looksTailwind = (c) =>
     /[:\[\]/]/.test(c) ||
-    /^-?(m|p|w|h|size|min|max|gap|space|inset|top|left|right|bottom|z|bg|text|font|border|ring|rounded|shadow|flex|grid|col|row|order|items|justify|self|place|content|overflow|opacity|transition|duration|ease|animate|translate|scale|rotate|blur|backdrop|aspect|object|leading|tracking|line|truncate|whitespace|break|sr|pointer|cursor|select|snap|scroll|divide|outline|fill|stroke|from|via|to|inline|block|hidden|absolute|relative|fixed|sticky|static|container|antialiased|uppercase|lowercase|capitalize|italic|underline|list|table|float|clear|isolate|mix|will|appearance|resize|decoration|accent|caret|origin|basis|grow|shrink|columns|invisible|visible)(-|$)/.test(c);
+    /^-?([mp][xytrblse]?|w|h|size|min|max|gap|space|inset|top|left|right|bottom|z|bg|text|font|border|ring|rounded|shadow|flex|grid|col|row|order|items|justify|self|place|content|overflow|opacity|transition|duration|ease|animate|translate|scale|rotate|blur|backdrop|aspect|object|leading|tracking|line|truncate|whitespace|break|sr|pointer|cursor|select|snap|scroll|divide|outline|fill|stroke|from|via|to|inline|block|hidden|absolute|relative|fixed|sticky|static|container|antialiased|uppercase|lowercase|capitalize|italic|underline|list|table|float|clear|isolate|mix|will|appearance|resize|decoration|accent|caret|origin|basis|grow|shrink|columns|invisible|visible)(-|$)/.test(c);
   const dead = [...classes].filter((c) => looksTailwind(c) && !defined.has(c) && !pageDefined.has(c)).sort();
   console.log(`  ${dead.length} dead utility classes (no rule in tailwind.css or the page's own <style>):`);
   console.log("  " + dead.join("  "));

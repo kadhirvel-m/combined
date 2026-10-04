@@ -102,7 +102,7 @@ function hodNavProfile(p: RoleProfile | null): SessionProfile {
  */
 export function useLandingSession(): LandingSessionState {
   const [state, setState] = useState<LandingSessionState>({ cta: "loading", teacherProfile: null, hodProfile: null });
-  const { updateProfile } = useSession();
+  const { updateProfile, setProfileHref } = useSession();
 
   useEffect(() => {
     let cancelled = false;
@@ -111,11 +111,14 @@ export function useLandingSession(): LandingSessionState {
       setState(next);
       if (next.cta === "teacher" && next.teacherProfile) updateProfile(teacherNavProfile(next.teacherProfile));
       else if (next.cta === "hod") updateProfile(hodNavProfile(next.hodProfile));
+      // The original also re-pointed the navbar profile links for these roles.
+      if (next.cta === "teacher") setProfileHref("/teacher_profile.html?user=me");
+      else if (next.cta === "hod") setProfileHref("/hod/hod_classes.html");
     });
     return () => {
       cancelled = true;
     };
-  }, [updateProfile]);
+  }, [updateProfile, setProfileHref]);
 
   return state;
 }

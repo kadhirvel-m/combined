@@ -41,6 +41,11 @@ export interface SessionValue {
   profileHref: string;
   /** Merge fresh profile data (e.g. after the profile page loads or saves it). */
   updateProfile: (patch: SessionProfile) => void;
+  /**
+   * Point the navbar avatar somewhere else (e.g. a teacher's or HOD's own page
+   * once a page has detected the role). `null` restores the default.
+   */
+  setProfileHref: (href: string | null) => void;
   /** Re-read the session from the backend. */
   reload: () => Promise<void>;
   /** POST /logout, clear local auth markers and go to the right login page. */
@@ -117,6 +122,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<SessionStatus>("loading");
   const [kind, setKind] = useState<SessionKind | null>(null);
   const [profile, setProfile] = useState<SessionProfile | null>(null);
+  const [profileHrefOverride, setProfileHref] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     const hasRefresh = !!usable(read(sessionStorage, REFRESH_TOKEN_KEY));
@@ -179,12 +185,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       displayName: String(profile?.name || profile?.full_name || "Profile"),
       initials: initialsOf(name),
       avatarUrl: (profile?.logo_url || profile?.profile_image_url || profile?.avatar_url || null) as string | null,
-      profileHref: kind === "teacher" ? "/teacher_profile.html?user=me" : "/profile.html",
+      profileHref: profileHrefOverride ?? (kind === "teacher" ? "/teacher_profile.html?user=me" : "/profile.html"),
       updateProfile,
+      setProfileHref,
       reload,
       signOut,
     };
-  }, [status, kind, profile, updateProfile, reload, signOut]);
+  }, [status, kind, profile, profileHrefOverride, updateProfile, reload, signOut]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

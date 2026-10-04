@@ -180,6 +180,16 @@ except Exception:
     # Fallback to default discovery
     load_dotenv()
 
+# SUPABASE_URL must be the project base URL (https://<ref>.supabase.co). A value
+# copied from the REST/Auth endpoint (".../rest/v1/") makes the Supabase client
+# call ".../rest/v1/auth/v1/token" (404), so every sign-in fails with
+# "Invalid credentials". Normalize it once for every reader below.
+_raw_supabase_url = (os.getenv("SUPABASE_URL") or "").strip()
+if _raw_supabase_url:
+    _clean_supabase_url = re.sub(r"(/(rest|auth|storage|functions)/v1)?/*$", "", _raw_supabase_url)
+    if _clean_supabase_url != _raw_supabase_url:
+        os.environ["SUPABASE_URL"] = _clean_supabase_url
+
 # ==========================================
 # INLINED PACKAGES: youtube_video & yt_transcript
 # ==========================================

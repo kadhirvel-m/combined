@@ -9,7 +9,7 @@ const mobile = process.argv.includes("--mobile");
 const dark = process.argv.includes("--dark");
 const browser = await chromium.launch();
 const out = [];
-for (const url of [`http://127.0.0.1:5500/${orig}`, `http://localhost:3200${next}`]) {
+for (const url of [`http://127.0.0.1:5500/${orig}`, `http://localhost:3000${next}`]) {
   const ctx = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1366, height: 900 }, colorScheme: dark ? "dark" : "light" });
   const page = await ctx.newPage();
   await page.goto(url, { waitUntil: "load" });

@@ -4,7 +4,15 @@ import { Providers } from "@/components/providers/Providers";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], display: "swap" });
+// Glyphs Inter's latin subset lacks (e.g. "→") fall back to the system UI font,
+// as they did on the original pages (Inter, ui-sans-serif, system-ui, sans-serif).
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  display: "swap",
+  fallback: ["ui-sans-serif", "system-ui", "sans-serif"],
+  adjustFontFallback: false,
+});
 
 /**
  * Layout for pages rebuilt as React components. Legacy pages (src/app/<route>)

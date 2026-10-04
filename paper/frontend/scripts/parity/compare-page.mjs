@@ -29,7 +29,7 @@ const arg = (f, d) => (args.includes(f) ? args[args.indexOf(f) + 1] : d);
 const flag = (f) => args.includes(f);
 
 const ORIG_BASE = arg("--orig-base", "http://127.0.0.1:5500");
-const NEXT_BASE = arg("--next-base", "http://localhost:3200");
+const NEXT_BASE = arg("--next-base", "http://localhost:3000");
 const origPath = arg("--orig");
 const nextPath = arg("--next", origPath ? "/" + origPath : undefined);
 if (!origPath) {

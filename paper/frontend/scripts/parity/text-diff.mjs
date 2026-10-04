@@ -6,7 +6,7 @@ const [orig, next] = process.argv.slice(2);
 const mobile = process.argv.includes("--mobile");
 const browser = await chromium.launch();
 const texts = [];
-for (const url of [`http://127.0.0.1:5500/${orig}`, `http://localhost:3200${next}`]) {
+for (const url of [`http://127.0.0.1:5500/${orig}`, `http://localhost:3000${next}`]) {
   const page = await (await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1366, height: 900 } })).newPage();
   await page.goto(url, { waitUntil: "load" });
   await page.waitForTimeout(2000);

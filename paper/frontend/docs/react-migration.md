@@ -33,10 +33,22 @@ src/features/<feature>/             everything specific to the page family
   *.module.css                      page-specific CSS that Tailwind can't express
 ```
 
-The route folder must match the original path: `ui/collage/syllabus.html` →
+The final route folder must match the original path: `ui/collage/syllabus.html` →
 `src/app/(site)/collage/syllabus/page.tsx`; `ui/index.html` →
 `src/app/(site)/page.tsx`. The `.html` URL keeps working through the rewrite in
 `next.config.ts`. Do not add routes that the original didn't have.
+
+**Build at a preview route first.** While a page is being rebuilt, its legacy
+version keeps serving the real URL (`/collage/syllabus.html`), so the app keeps
+working. A React route at the same path would clash with the legacy route
+(`src/app/collage/syllabus/page.tsx`) and break the dev server for everyone. So
+build at `src/app/(site)/react-preview/<original path>/page.tsx` (served at
+`/react-preview/collage/syllabus`) and pass that URL to the parity tools.
+Links inside the page still point at the real `.html` URLs. Don't edit
+`migrated.json`. When the page is verified, the coordinator moves the route
+folder to its final place, adds the page to `scripts/convert-ui/migrated.json`
+and runs `node scripts/convert-ui/index.mjs` (which removes the legacy route)
+in the same step.
 
 ## Shared building blocks (use them; don't re-create them)
 
@@ -46,7 +58,11 @@ The route folder must match the original path: `ui/collage/syllabus.html` →
   `Skeleton`, `EmptyState`, `ProgressBar`, `LoadingOverlay`, `Container`,
   `SectionHeading`, `Spinner`, `cn` (from `@/lib/cn`).
 - `@/components/site`: `SiteHeader` (sticky navbar, Projects mega menu, theme
-  toggle, auth avatar/sign-out, mobile drawer; props for custom links/actions),
+  toggle, auth avatar/sign-out, mobile drawer; props for custom links/actions,
+  `actionsPosition` to put `actions` after the theme toggle, `mobileBar` to
+  replace the mobile theme/menu buttons with page controls (app pages without a
+  drawer), and `mobileAccountActions` for signed-in drawer buttons such as
+  "Devices"),
   `SiteFooter`, `AnnouncementBar`, `ThemeToggle`, `AppLink`.
 - `@/components/content`: `Markdown` (marked + DOMPurify + KaTeX + highlight.js),
   `Lottie` (replaces `<dotlottie-wc>`), `Turnstile` (Cloudflare widget with the
@@ -61,7 +77,7 @@ The route folder must match the original path: `ui/collage/syllabus.html` →
   (raw Response, for streaming), `apiUrl`, `apiBase`, `ApiError`. Cookies,
   CSRF and token refresh are handled for you (same runtime as legacy pages).
 - `@/lib/session`: `useSession()` → `{ status, kind, profile, displayName,
-  initials, avatarUrl, profileHref, updateProfile, reload, signOut }`, plus
+  initials, avatarUrl, profileHref, updateProfile, setProfileHref, reload, signOut }`, plus
   `detectSession()`/`clearAuthMarkers()` for auth flows.
 - `@/lib/theme`: `useTheme()` → `{ theme, setTheme, toggleTheme }` (shares
   `localStorage.px_theme` with legacy pages).
@@ -97,6 +113,12 @@ folders; describe shared-component changes you'd want in your report instead.
   what its class list suggests. The shared `SiteHeader`/`SiteFooter` are the one
   exception; they follow the landing page's (fully styled) rendering on every
   page.
+- Aspect ratios: `@tailwindcss/aspect-ratio` replaces core `aspect-video`/
+  `aspect-square` (they generate nothing, as in the prebuilt CSS). Where the
+  original really had a ratio (CDN pages), write `aspect-[16/9]`.
+- CSS modules: write only the standard `backdrop-filter`; Lightning CSS adds
+  the prefix. A `backdrop-filter` + `-webkit-backdrop-filter` pair compiles to
+  the prefixed one only, which Chromium ignores.
 - `bg-hero-light` is the prebuilt stylesheet's pinker gradient; the landing
   page's whiter CDN variant is `bg-hero-light-soft`.
 - Page `<style>` blocks become CSS Modules or Tailwind classes. Global selectors
@@ -110,7 +132,7 @@ folders; describe shared-component changes you'd want in your report instead.
 
 ## Verifying
 
-- The dev server is already running at `http://localhost:3200`. Don't start
+- The dev server is already running at `http://localhost:3000`. Don't start
   another one or run `next build`. The original UI is at
   `http://127.0.0.1:5500/<file>`.
 - `node scripts/parity/compare-page.mjs --orig <file> --next <path>` screenshots

@@ -97,7 +97,7 @@ export function AiAssistant() {
       <div
         ref={panelRef}
         className={cn(
-          "fixed bottom-28 right-6 max-h-[70vh] flex flex-col rounded-2xl shadow-neon overflow-hidden opacity-0 translate-y-4 transition-all duration-300",
+          "fixed bottom-28 right-6 w-[min(420px,90vw)] max-h-[70vh] flex flex-col rounded-2xl shadow-neon overflow-hidden opacity-0 translate-y-4 transition-all duration-300",
           styles.glass,
           styles.aiPanel,
           open ? styles.open : "pointer-events-none",

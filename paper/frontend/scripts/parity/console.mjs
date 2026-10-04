@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Prints a page's console errors/warnings, uncaught errors, title and first text.
-//   node scripts/parity/console.mjs http://localhost:3200/about.html [waitMs]
+//   node scripts/parity/console.mjs http://localhost:3000/about.html [waitMs]
 import { chromium } from "playwright";
 
 const url = process.argv[2];

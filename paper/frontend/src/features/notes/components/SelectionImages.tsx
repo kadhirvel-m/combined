@@ -23,6 +23,8 @@ export interface SelectionImageJob {
 
 interface SelectionImagesValue {
   jobs: SelectionImageJob[];
+  /** The card loses its `hidden` (mobile) class once anything was loaded or requested, as in the original. */
+  revealed: boolean;
   generate: (selectedText: string) => Promise<void>;
 }
 
@@ -55,6 +57,7 @@ let reqSeq = 0;
 export function SelectionImagesProvider({ children }: { children: ReactNode }) {
   const { snack, topicSignal, titleRef, topic: inputTopic } = useNotes();
   const [jobs, setJobs] = useState<SelectionImageJob[]>([]);
+  const [revealed, setRevealed] = useState(false);
   const active = useRef(0);
   const topicRef = useRef(inputTopic);
   useEffect(() => {
@@ -71,7 +74,10 @@ export function SelectionImagesProvider({ children }: { children: ReactNode }) {
     void (async () => {
       await Promise.resolve();
       if (!topic) {
-        if (live) setJobs([]);
+        if (live) {
+          setJobs([]);
+          setRevealed(true);
+        }
         return;
       }
       try {
@@ -86,6 +92,7 @@ export function SelectionImagesProvider({ children }: { children: ReactNode }) {
           loaded.unshift({ id: `saved-${loaded.length}-${imageUrl}`, status: "done", text: String(item?.selected_text || topic || "Generated image"), meta: "", imageUrl });
         }
         setJobs(loaded);
+        setRevealed(true);
       } catch (err) {
         console.warn("Failed to load selected images by topic", err);
       }
@@ -102,6 +109,7 @@ export function SelectionImagesProvider({ children }: { children: ReactNode }) {
       const startedAt = performance.now();
       console.log("[SelImg][UI] queued", { reqId: id, active: active.current });
       setJobs((all) => [{ id, status: "pending", text: selectedText, meta: `Request ${id} started` }, ...all]);
+      setRevealed(true);
       try {
         const topic = (topicRef.current || titleRef.current || "").trim();
         const payload = { selected_text: selectedText, topic };
@@ -165,7 +173,7 @@ export function SelectionImagesProvider({ children }: { children: ReactNode }) {
     [patchJob, snack, titleRef],
   );
 
-  const value = useMemo(() => ({ jobs, generate }), [jobs, generate]);
+  const value = useMemo(() => ({ jobs, revealed, generate }), [jobs, revealed, generate]);
   return <SelectionImagesContext.Provider value={value}>{children}</SelectionImagesContext.Provider>;
 }
 
@@ -237,9 +245,9 @@ function JobCard({ job }: { job: SelectionImageJob }) {
 
 /** "Images Generating" card listing the selected-text image jobs. */
 export function SelectionImagesCard() {
-  const { jobs } = useSelectionImages();
+  const { jobs, revealed } = useSelectionImages();
   return (
-    <section className={cn("rounded-2xl shadow-glow hidden sm:block", styles.glass)} style={{ ...outline, background: "color-mix(in oklab, var(--surface) 75%, transparent)" }}>
+    <section className={cn("rounded-2xl shadow-glow", !revealed && "hidden sm:block", styles.glass)} style={{ ...outline, background: "color-mix(in oklab, var(--surface) 75%, transparent)" }}>
       <div className="p-4 sm:p-5">
         <h3 className="text-sm font-semibold mb-3">Images Generating</h3>
         <div className="space-y-2 text-xs text-[var(--muted)]">{jobs.length ? jobs.map((job) => <JobCard key={job.id} job={job} />) : <p>{EMPTY_TEXT}</p>}</div>
