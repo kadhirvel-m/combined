@@ -7,6 +7,8 @@ import re
 import math
 import time
 import json
+import functools
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional, Set, Iterable
 from urllib.parse import urlparse
 
@@ -45,6 +47,11 @@ def _safe_int(x: Optional[str]) -> Optional[int]:
 def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().lower())
 
+@functools.lru_cache(maxsize=512)
+def _compile_word_boundary_pattern(s: str) -> re.Pattern:
+    """Return a cached compiled regex for word-boundary skill matching."""
+    return re.compile(rf"\b{re.escape(s)}\b")
+
 def _skill_in_text(text: str, skill: str) -> bool:
     """Word-boundary match for single-token skills; substring for multi-word skills."""
     t = _norm(text)
@@ -53,7 +60,7 @@ def _skill_in_text(text: str, skill: str) -> bool:
         return False
     if " " in s:
         return s in t
-    return re.search(rf"\b{re.escape(s)}\b", t) is not None
+    return _compile_word_boundary_pattern(s).search(t) is not None
 
 def _chunks(lst: List[Any], n: int) -> Iterable[List[Any]]:
     for i in range(0, len(lst), n):
@@ -98,20 +105,31 @@ def _greedy_cover_from_candidates(
     # sort once for stable tiebreaks
     items_sorted = sorted(candidates, key=tie_key_func)
 
+    # Build a reverse index: skill → sorted list of candidate indices (already in tie-break order)
+    skill_to_indices: Dict[str, List[int]] = {}
+    for i, cand in enumerate(items_sorted):
+        for skill in (cand.get("matched_norm") or []):
+            skill_to_indices.setdefault(skill, []).append(i)
+
     uncovered: Set[str] = set(norm_to_orig.keys())
     selected: List[Dict[str, Any]] = []
+    used_indices: Set[int] = set()
 
     while uncovered:
+        best_idx = None
         best = None
         best_new = 0
         best_tie = 10_000
 
-        for cand in items_sorted:
+        for i, cand in enumerate(items_sorted):
+            if i in used_indices:
+                continue
             matched_norm = cand.get("matched_norm") or []
             new_cover = uncovered.intersection(matched_norm)
             c = len(new_cover)
             if c > best_new or (c == best_new and tie_key_func(cand) < best_tie):
                 if c > 0:
+                    best_idx = i
                     best = (cand, list(new_cover))
                     best_new = c
                     best_tie = tie_key_func(cand)
@@ -131,18 +149,20 @@ def _greedy_cover_from_candidates(
         }
         selected.append({"group_skills": group_skills, item_key: payload})
 
-        # mark covered and remove candidate
+        # mark covered; O(1) set add instead of O(n) list.remove
         uncovered.difference_update(new_cover_norm)
-        items_sorted.remove(cand)
+        used_indices.add(best_idx)
 
-    # fallback for any remaining skills: pick top-ranked candidate containing it
+    # fallback for any remaining skills: use reverse index for O(1) lookup (was O(n×m))
     if uncovered:
         for nsk in list(uncovered):
-            cands = [c for c in items_sorted if nsk in (c.get("matched_norm") or [])]
-            if not cands:
+            best = None
+            for i in skill_to_indices.get(nsk, []):
+                if i not in used_indices:
+                    best = items_sorted[i]
+                    break  # already in tie-break order
+            if not best:
                 continue
-            cands.sort(key=tie_key_func)
-            best = cands[0]
             payload = {
                 "title":         best.get("title"),
                 "url":           best.get("url"),
@@ -189,27 +209,27 @@ def fetch_blogs_grouped_cover(
 
     candidates: List[Dict[str, Any]] = []
 
-    for skill in skills:
-        # Build query
+    def _fetch_blog_skill(skill: str) -> List[Dict[str, Any]]:
         q_core = f'{skill} tutorial OR "how to"'
         q = f"{q_core} {site_bias}" if site_bias else q_core
-
-        resp = requests.get(
-            SERPAPI_ENDPOINT,
-            params={
-                "engine": "google",
-                "q": q,
-                "num": max(10, min(50, search_per_skill)),
-                "api_key": SERPAPI_API_KEY,
-                "hl": language,
-                "gl": country,
-            },
-            timeout=20,
-        )
-
+        try:
+            resp = requests.get(
+                SERPAPI_ENDPOINT,
+                params={
+                    "engine": "google",
+                    "q": q,
+                    "num": max(10, min(50, search_per_skill)),
+                    "api_key": SERPAPI_API_KEY,
+                    "hl": language,
+                    "gl": country,
+                },
+                timeout=20,
+            )
+        except Exception:
+            return []
         if resp.status_code != 200:
-            continue
-
+            return []
+        results: List[Dict[str, Any]] = []
         organic = resp.json().get("organic_results", [])[:search_per_skill]
         for rank, o in enumerate(organic, start=1):
             title = (o.get("title") or "").strip()
@@ -221,17 +241,22 @@ def fetch_blogs_grouped_cover(
             matched_norm = [nsk for nsk in norm_skills if _skill_in_text(text, nsk)]
             if not matched_norm:
                 continue
-
-            candidates.append({
-                "_rank": rank,  # tie-breaker
+            results.append({
+                "_rank": rank,
                 "title": title,
                 "url": url,
                 "channel_title": _domain_as_channel(url) or (o.get("source") or o.get("displayed_link")),
-                "published_at": o.get("date"),   # may be relative like "2 days ago"
-                "thumbnail": None,               # blogs rarely have reliable thumbs from SerpAPI
-                "views": None,                   # schema parity
+                "published_at": o.get("date"),
+                "thumbnail": None,
+                "views": None,
                 "matched_norm": matched_norm,
             })
+        return results
+
+    with ThreadPoolExecutor(max_workers=max(1, min(5, len(skills)))) as executor:
+        futures = {executor.submit(_fetch_blog_skill, skill): skill for skill in skills}
+        for future in as_completed(futures):
+            candidates.extend(future.result())
 
     return _greedy_cover_from_candidates(
         candidates=candidates,
@@ -269,34 +294,33 @@ def fetch_news_grouped_cover(
 
     candidates: List[Dict[str, Any]] = []
 
-    for skill in skills:
-        resp = requests.get(
-            SERPAPI_ENDPOINT,
-            params={
-                "engine": "google_news",
-                "q": f"{skill} tutorial OR course OR learning",
-                "api_key": SERPAPI_API_KEY,
-                "hl": language,
-                "gl": country,
-            },
-            timeout=20,
-        )
-
+    def _fetch_news_skill(skill: str) -> List[Dict[str, Any]]:
+        try:
+            resp = requests.get(
+                SERPAPI_ENDPOINT,
+                params={
+                    "engine": "google_news",
+                    "q": f"{skill} tutorial OR course OR learning",
+                    "api_key": SERPAPI_API_KEY,
+                    "hl": language,
+                    "gl": country,
+                },
+                timeout=20,
+            )
+        except Exception:
+            return []
         if resp.status_code != 200:
-            continue
-
+            return []
+        results: List[Dict[str, Any]] = []
         news_results = resp.json().get("news_results", [])[:search_per_skill]
         for rank, n in enumerate(news_results, start=1):
             title = (n.get("title") or "").strip()
             url   = n.get("link")
             if not url:
                 continue
-
             snippet = ""
             if include_snippet:
                 snippet = n.get("snippet") or n.get("content") or ""
-
-            # Thumbnail may be dict or str
             tn = n.get("thumbnail")
             if isinstance(tn, dict):
                 thumb = tn.get("static") or tn.get("original")
@@ -304,22 +328,26 @@ def fetch_news_grouped_cover(
                 thumb = tn
             else:
                 thumb = None
-
             text = f"{title}\n{snippet}"
             matched_norm = [nsk for nsk in norm_skills if _skill_in_text(text, nsk)]
             if not matched_norm:
                 continue
-
-            candidates.append({
-                "_rank": rank,  # tie-breaker
+            results.append({
+                "_rank": rank,
                 "title": title,
                 "url": url,
                 "channel_title": (n.get("source") or {}).get("name") or _domain_as_channel(url),
-                "published_at": n.get("date"),  # may be relative
+                "published_at": n.get("date"),
                 "thumbnail": thumb,
-                "views": None,                  # schema parity
+                "views": None,
                 "matched_norm": matched_norm,
             })
+        return results
+
+    with ThreadPoolExecutor(max_workers=max(1, min(5, len(skills)))) as executor:
+        futures = {executor.submit(_fetch_news_skill, skill): skill for skill in skills}
+        for future in as_completed(futures):
+            candidates.extend(future.result())
 
     return _greedy_cover_from_candidates(
         candidates=candidates,
@@ -354,30 +382,38 @@ def fetch_youtube_grouped_cover(
     norm_to_orig = { _norm(s): s for s in skills }
     norm_skills  = list(norm_to_orig.keys())
 
-    # 1) search per skill -> candidate ids
+    # 1) search per skill -> candidate ids (parallel)
     candidate_ids: List[str] = []
-    for orig in skills:
+
+    def _search_yt_skill(orig: str) -> List[str]:
         q = f'"{orig}" tutorial OR course'
-        s = requests.get(
-            YOUTUBE_SEARCH,
-            params={
-                "key": YOUTUBE_API_KEY,
-                "part": "snippet",
-                "q": q,
-                "type": "video",
-                "order": "viewCount",
-                "maxResults": max(5, min(50, search_per_skill)),
-                "regionCode": region_code,
-                "relevanceLanguage": relevance_language,
-                "safeSearch": "moderate",
-            },
-            timeout=20,
-        )
+        try:
+            s = requests.get(
+                YOUTUBE_SEARCH,
+                params={
+                    "key": YOUTUBE_API_KEY,
+                    "part": "snippet",
+                    "q": q,
+                    "type": "video",
+                    "order": "viewCount",
+                    "maxResults": max(5, min(50, search_per_skill)),
+                    "regionCode": region_code,
+                    "relevanceLanguage": relevance_language,
+                    "safeSearch": "moderate",
+                },
+                timeout=20,
+            )
+        except Exception:
+            return []
         if s.status_code != 200:
-            continue
-        ids = [it.get("id", {}).get("videoId") for it in s.json().get("items", [])]
-        for vid in filter(None, ids):
-            candidate_ids.append(vid)
+            return []
+        return [it.get("id", {}).get("videoId") for it in s.json().get("items", [])]
+
+    with ThreadPoolExecutor(max_workers=max(1, min(5, len(skills)))) as executor:
+        futures = {executor.submit(_search_yt_skill, orig): orig for orig in skills}
+        for future in as_completed(futures):
+            for vid in filter(None, future.result()):
+                candidate_ids.append(vid)
 
     # dedup while preserving order
     seen: Set[str] = set()

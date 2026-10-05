@@ -1,10 +1,4 @@
 import os
-from google import genai
-from google.genai import types
-
-os.environ["GEMINI_API_KEY"] = "AIzaSyBpzH87B28vzi0dOfAZasd4sneg4rpCNfo"
-
-import os
 import argparse
 import logging
 import time
@@ -12,8 +6,11 @@ import html
 import re
 from typing import Optional
 
+from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+
+load_dotenv()
 
 # --- Configurable defaults ---
 DEFAULT_MODEL = "gemini-2.5-flash"
@@ -99,7 +96,7 @@ def generate_content(
     Retries on transient errors.
     Returns the HTML string on success and writes to output_path if provided.
     """
-    api_key = "AIzaSyBpzH87B28vzi0dOfAZasd4sneg4rpCNfo"
+    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY environment variable is not set.")
 
